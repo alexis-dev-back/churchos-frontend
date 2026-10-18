@@ -1,0 +1,39 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  background: var(--background);
+}
+
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.content-shell {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  margin-left: 180px;
+}
+
+@media (max-width: 1024px) {
+  .content-shell {
+    margin-left: 180px;
+  }
+}
+
+.page-content {
+  flex: 1;
+  padding: 0 24px 20px;
+}
+
+@media (max-width: 767px) {
+  .content-shell {
+    margin-left: 0;
+  }
+
+  .page-content {
+    padding: 0 14px 18px;
+  }
+}

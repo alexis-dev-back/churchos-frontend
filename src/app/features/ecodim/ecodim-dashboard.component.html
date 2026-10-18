@@ -1,0 +1,381 @@
+<main class="ecodim-page">
+  <nav class="breadcrumbs" aria-label="Fil d’Ariane"><a href="/dashboard">Accueil</a><span>›</span><strong>ECODIM</strong></nav>
+  <header class="page-heading ecodim-heading">
+    <div class="ecodim-title">
+      <span class="ecodim-title-icon" aria-hidden="true">✦</span>
+      <div>
+        <h1>ECODIM</h1>
+        <p class="subtitle">Accompagner nos enfants et adolescents dans leur croissance spirituelle, morale et sociale.</p>
+      </div>
+    </div>
+    <label class="church-select" *ngIf="hasMultipleChurches">
+      <span>Église</span>
+      <select [(ngModel)]="selectedChurchId" (ngModelChange)="onChurchChange()" aria-label="Choisir une église">
+        <option *ngFor="let church of context?.churches" [value]="church.church_id">{{ church.name }}</option>
+      </select>
+    </label>
+    <div class="heading-actions" *ngIf="context?.can_manage">
+      <button class="button button-primary" type="button" (click)="showChildForm = !showChildForm">Ajouter un enfant</button>
+      <button class="button button-light" type="button" (click)="showSessionForm = !showSessionForm">Programmer une séance</button>
+      <button class="icon-button" type="button" aria-label="Gérer les classes" title="Gérer les classes" (click)="setTab('classes')">•••</button>
+    </div>
+  </header>
+
+  <p class="feedback error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
+  <p class="feedback success" *ngIf="successMessage" role="status">{{ successMessage }}</p>
+
+  <nav class="tabs" aria-label="Navigation ECODIM">
+    <button type="button" [class.active]="selectedTab === 'overview'" (click)="setTab('overview')">Vue d’ensemble</button>
+    <button type="button" [class.active]="selectedTab === 'children'" (click)="setTab('children')">Enfants</button>
+    <button type="button" [class.active]="selectedTab === 'classes'" (click)="setTab('classes')">Classes</button>
+    <button type="button" [class.active]="selectedTab === 'staff'" (click)="setTab('staff')">Équipe</button>
+  </nav>
+
+  <div class="ecodim-modal-backdrop" *ngIf="showChildForm && context?.can_manage" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="showChildForm = false">
+    <section class="form-panel ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="child-form-title" (click)="$event.stopPropagation()">
+      <div class="panel-heading">
+        <div><p class="eyebrow">NOUVEAU DOSSIER</p><h2 id="child-form-title">Ajouter un enfant</h2></div>
+        <button type="button" class="icon-button" aria-label="Fermer le formulaire" (click)="showChildForm = false">×</button>
+      </div>
+      <form class="form-grid" (ngSubmit)="submitChild()">
+      <label>Prénom *<input name="childFirstName" [(ngModel)]="childForm.first_name" required maxlength="150" /></label>
+      <label>Nom *<input name="childLastName" [(ngModel)]="childForm.last_name" required maxlength="150" /></label>
+      <label>Date de naissance<input name="childBirthDate" [(ngModel)]="childForm.date_of_birth" type="date" /></label>
+      <div class="family-picker">
+        <label for="childFamilySearch">Famille (facultatif)</label>
+        <input id="childFamilySearch" name="childFamilySearch" type="search" autocomplete="off"
+          [ngModel]="familySearch" (ngModelChange)="searchFamilyNames($event)"
+          (focus)="familyOptionsOpen = true" placeholder="Rechercher une famille…" />
+        <div class="family-options" *ngIf="familyOptionsOpen">
+          <button type="button" class="family-option" (click)="selectFamily(null)">Aucune famille</button>
+          <button type="button" class="family-option" *ngFor="let family of filteredFamilies" (click)="selectFamily(family)">{{ family.name }}</button>
+          <p class="family-empty" *ngIf="!filteredFamilies.length">Aucune famille correspondante.</p>
+        </div>
+        <small class="family-selection" *ngIf="childForm.family">Famille sélectionnée : {{ familySearch }}</small>
+      </div>
+      <label>Profil membre existant (facultatif)
+        <select name="childMember" [(ngModel)]="childForm.member">
+          <option value="">Aucun rattachement</option>
+          <option *ngFor="let member of members" [value]="member.id">{{ member.first_name }} {{ member.last_name }}</option>
+        </select>
+      </label>
+      <label>Genre
+        <select name="childGender" [(ngModel)]="childForm.gender">
+          <option value="">Non renseigné</option><option value="F">Féminin</option><option value="M">Masculin</option>
+        </select>
+      </label>
+      <div class="form-actions"><button class="button button-light" type="button" (click)="showChildForm = false">Annuler</button><button class="button button-primary" type="submit" [disabled]="saving">{{ saving ? 'Enregistrement…' : 'Créer le dossier' }}</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="ecodim-modal-backdrop" *ngIf="showClassForm && context?.can_manage" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="showClassForm = false">
+    <section class="form-panel ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="class-form-title" (click)="$event.stopPropagation()">
+      <div class="panel-heading">
+        <div><p class="eyebrow">NOUVELLE CLASSE</p><h2 id="class-form-title">Créer une classe</h2></div>
+        <button type="button" class="icon-button" aria-label="Fermer le formulaire" (click)="showClassForm = false">×</button>
+      </div>
+      <form class="form-grid" (ngSubmit)="submitClass()">
+      <label>Nom de la classe *<input name="className" [(ngModel)]="classForm.name" required maxlength="150" /></label>
+      <label>Niveau<input name="classLevel" [(ngModel)]="classForm.level" maxlength="80" placeholder="Ex. 6–8 ans" /></label>
+      <label>Âge minimum<input name="minimumAge" [(ngModel)]="classForm.minimum_age" type="number" min="0" max="120" /></label>
+      <label>Âge maximum<input name="maximumAge" [(ngModel)]="classForm.maximum_age" type="number" min="0" max="120" /></label>
+      <label>Capacité<input name="classCapacity" [(ngModel)]="classForm.capacity" type="number" min="1" /></label>
+      <div class="form-actions"><button class="button button-light" type="button" (click)="showClassForm = false">Annuler</button><button class="button button-primary" type="submit" [disabled]="saving">{{ saving ? 'Enregistrement…' : 'Créer la classe' }}</button></div>
+      </form>
+    </section>
+  </div>
+
+  <div class="ecodim-modal-backdrop" *ngIf="showSessionForm && context?.can_manage" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="showSessionForm = false">
+    <section class="form-panel ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="session-form-title" (click)="$event.stopPropagation()">
+      <div class="panel-heading"><div><p class="eyebrow">CALENDRIER ECODIM</p><h2 id="session-form-title">Programmer une séance</h2></div><button type="button" class="icon-button" aria-label="Fermer le formulaire" (click)="showSessionForm = false">×</button></div>
+      <form class="form-grid" (ngSubmit)="submitSession()">
+      <label>Intitulé *<input name="sessionTitle" [(ngModel)]="sessionForm.title" required maxlength="200" /></label>
+      <label>Classe concernée
+        <select name="sessionClass" [(ngModel)]="sessionForm.ecodim_class"><option value="">Toutes les classes</option><option *ngFor="let group of dashboard?.classes" [value]="group.id">{{ group.name }}</option></select>
+      </label>
+      <label>Début *<input name="sessionStarts" [(ngModel)]="sessionForm.starts_at" type="datetime-local" required /></label>
+      <label>Fin *<input name="sessionEnds" [(ngModel)]="sessionForm.ends_at" type="datetime-local" required /></label>
+      <label>Lieu<input name="sessionLocation" [(ngModel)]="sessionForm.location" maxlength="255" /></label>
+      <div class="form-actions"><button class="button button-light" type="button" (click)="showSessionForm = false">Annuler</button><button class="button button-primary" type="submit" [disabled]="saving">{{ saving ? 'Enregistrement…' : 'Programmer la séance' }}</button></div>
+      </form>
+    </section>
+  </div>
+
+  <section class="panel child-detail" *ngIf="loadingChild || selectedChild">
+    <div class="panel-heading">
+      <div><p class="eyebrow">DOSSIER ENFANT</p><h2>{{ selectedChild ? selectedChild.first_name + ' ' + selectedChild.last_name : 'Chargement…' }}</h2></div>
+      <button type="button" class="icon-button" aria-label="Fermer la fiche" (click)="closeChild()">×</button>
+    </div>
+    <div class="detail-loading" *ngIf="loadingChild">Chargement de la fiche et des autorisations…</div>
+    <ng-container *ngIf="selectedChild as child">
+      <div class="child-summary">
+        <span class="avatar large">{{ child.first_name.charAt(0) }}{{ child.last_name.charAt(0) }}</span>
+        <div><strong>{{ child.reference }}</strong><span>{{ child.age === null ? 'Âge non renseigné' : child.age + ' ans' }}<ng-container *ngIf="child.date_of_birth"> · Né(e) le {{ child.date_of_birth | date:'dd/MM/yyyy' }}</ng-container><ng-container *ngIf="child.family_name"> · {{ child.family_name }}</ng-container></span></div>
+        <span class="status-pill" [class.inactive]="child.status !== 'ACTIVE'">{{ child.status === 'ACTIVE' ? 'Actif' : child.status === 'INACTIVE' ? 'Inactif' : 'Archivé' }}</span>
+      </div>
+      <div class="identity-row" *ngIf="context?.can_manage">
+        <span>Profil lié : <strong>{{ child.member ? 'Membre associé' : 'Aucun' }}</strong> · Famille : <strong>{{ child.family_name || 'Aucune' }}</strong></span>
+        <button class="button button-light" type="button" (click)="showIdentityForm = true">Modifier les rattachements</button>
+      </div>
+      <div class="enrollment-row" *ngIf="context?.can_manage">
+        <span>Classe actuelle : <strong>{{ child.current_class_name || 'Aucune' }}</strong></span>
+        <button class="button button-light" type="button" (click)="showEnrollmentForm = true">Affecter à une classe</button>
+      </div>
+      <div class="ecodim-modal-backdrop" *ngIf="showIdentityForm && context?.can_manage" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="showIdentityForm = false">
+        <section class="form-panel ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="identity-form-title" (click)="$event.stopPropagation()">
+          <div class="panel-heading"><div><p class="eyebrow">DOSSIER ENFANT</p><h2 id="identity-form-title">Modifier les rattachements</h2></div><button type="button" class="icon-button" aria-label="Fermer le formulaire" (click)="showIdentityForm = false">×</button></div>
+          <div class="form-grid">
+            <label>Profil membre
+              <select aria-label="Rattacher à un membre existant" [(ngModel)]="childIdentityForm.member"><option value="">Aucun membre lié</option><option *ngFor="let member of members" [value]="member.id">{{ member.first_name }} {{ member.last_name }}</option></select>
+            </label>
+            <label>Famille
+              <select aria-label="Rattacher à une famille" [(ngModel)]="childIdentityForm.family"><option value="">Aucune famille liée</option><option *ngFor="let family of families" [value]="family.id">{{ family.name }}</option></select>
+            </label>
+            <div class="form-actions"><button class="button button-light" type="button" (click)="showIdentityForm = false">Annuler</button><button class="button button-primary" type="button" [disabled]="saving" (click)="updateChildIdentity()">{{ saving ? 'Enregistrement…' : 'Mettre à jour' }}</button></div>
+          </div>
+        </section>
+      </div>
+      <div class="ecodim-modal-backdrop" *ngIf="showEnrollmentForm && context?.can_manage" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="showEnrollmentForm = false">
+        <section class="form-panel ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="enrollment-form-title" (click)="$event.stopPropagation()">
+          <div class="panel-heading"><div><p class="eyebrow">CLASSE ECODIM</p><h2 id="enrollment-form-title">Affecter {{ child.first_name }} à une classe</h2></div><button type="button" class="icon-button" aria-label="Fermer le formulaire" (click)="showEnrollmentForm = false">×</button></div>
+          <div class="form-grid">
+            <label>Classe
+              <select aria-label="Affecter à une classe" [(ngModel)]="selectedEnrollmentClassId"><option value="">Choisir une classe</option><option *ngFor="let group of classes" [value]="group.id">{{ group.name }}</option></select>
+            </label>
+            <div class="form-actions"><button class="button button-light" type="button" (click)="showEnrollmentForm = false">Annuler</button><button class="button button-primary" type="button" [disabled]="!selectedEnrollmentClassId || saving" (click)="enrollSelectedChild()">{{ saving ? 'Enregistrement…' : 'Affecter' }}</button></div>
+          </div>
+        </section>
+      </div>
+      <div class="detail-columns">
+        <section class="detail-section">
+          <div class="detail-title"><div><p class="eyebrow">RESPONSABLES</p><h3>Contacts du dossier</h3></div><button *ngIf="context?.can_manage" class="text-button" type="button" (click)="showGuardianForm = !showGuardianForm">+ Ajouter</button></div>
+          <div class="ecodim-modal-backdrop" *ngIf="showGuardianForm && context?.can_manage" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="showGuardianForm = false">
+          <section class="form-panel ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="guardian-form-title" (click)="$event.stopPropagation()">
+          <div class="panel-heading"><div><p class="eyebrow">RESPONSABLE</p><h2 id="guardian-form-title">Ajouter un contact</h2></div><button type="button" class="icon-button" aria-label="Fermer le formulaire" (click)="showGuardianForm = false">×</button></div>
+          <form class="pickup-form" (ngSubmit)="submitGuardian()">
+            <label>Nom complet *<input name="guardianName" [(ngModel)]="guardianForm.name" required maxlength="200" /></label>
+            <label>Téléphone<input name="guardianPhone" [(ngModel)]="guardianForm.phone" maxlength="30" /></label>
+            <label>Lien avec l’enfant<input name="guardianRelationship" [(ngModel)]="guardianForm.relationship" maxlength="80" /></label>
+            <label>Membre de l’église (facultatif)
+              <select name="guardianMember" [(ngModel)]="guardianForm.member"><option value="">Aucun rattachement</option><option *ngFor="let member of members" [value]="member.id">{{ member.first_name }} {{ member.last_name }}</option></select>
+            </label>
+            <label class="checkbox-label"><input name="guardianLegal" [(ngModel)]="guardianForm.is_legal_guardian" type="checkbox" /> Responsable légal</label>
+            <label class="checkbox-label"><input name="guardianPrimary" [(ngModel)]="guardianForm.is_primary_contact" type="checkbox" /> Contact principal</label>
+            <div class="form-actions"><button class="button button-light" type="button" (click)="showGuardianForm = false">Annuler</button><button class="button button-primary" type="submit" [disabled]="saving">{{ saving ? 'Enregistrement…' : 'Ajouter le responsable' }}</button></div>
+          </form>
+          </section>
+          </div>
+          <div class="contact-row" *ngFor="let guardian of child.guardians"><div><strong>{{ guardian.name }}</strong><span>{{ guardian.relationship || 'Responsable' }}<ng-container *ngIf="guardian.is_primary_contact"> · Contact principal</ng-container></span></div><a *ngIf="guardian.phone" [href]="'tel:' + guardian.phone">{{ guardian.phone }}</a></div>
+          <p class="empty-note" *ngIf="!child.guardians.length">Aucun contact n’a encore été ajouté.</p>
+        </section>
+        <section class="detail-section">
+          <div class="detail-title"><div><p class="eyebrow">SÉCURITÉ</p><h3>Personnes autorisées à récupérer</h3></div><button *ngIf="context?.can_manage" class="text-button" type="button" (click)="showPickupForm = !showPickupForm">+ Ajouter</button></div>
+          <div class="ecodim-modal-backdrop" *ngIf="showPickupForm && context?.can_manage" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="showPickupForm = false">
+          <section class="form-panel ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="pickup-form-title" (click)="$event.stopPropagation()">
+          <div class="panel-heading"><div><p class="eyebrow">SÉCURITÉ</p><h2 id="pickup-form-title">Autoriser une personne</h2></div><button type="button" class="icon-button" aria-label="Fermer le formulaire" (click)="showPickupForm = false">×</button></div>
+          <form class="pickup-form" (ngSubmit)="submitPickupAuthorization()">
+            <label>Nom complet *<input name="pickupName" [(ngModel)]="pickupForm.name" required maxlength="200" /></label>
+            <label>Téléphone<input name="pickupPhone" [(ngModel)]="pickupForm.phone" maxlength="30" /></label>
+            <label>Lien avec l’enfant<input name="pickupRelationship" [(ngModel)]="pickupForm.relationship" maxlength="80" placeholder="Parent, tuteur…" /></label>
+            <label>Membre de l’église (facultatif)
+              <select name="pickupMember" [(ngModel)]="pickupForm.member"><option value="">Aucun rattachement</option><option *ngFor="let member of members" [value]="member.id">{{ member.first_name }} {{ member.last_name }}</option></select>
+            </label>
+            <label>Autorisation valable jusqu’au<input name="pickupExpiry" [(ngModel)]="pickupForm.valid_until" type="date" /></label>
+            <div class="form-actions"><button class="button button-light" type="button" (click)="showPickupForm = false">Annuler</button><button class="button button-primary" type="submit" [disabled]="saving">{{ saving ? 'Enregistrement…' : 'Ajouter la personne' }}</button></div>
+          </form>
+          </section>
+          </div>
+          <div class="pickup-entry" *ngFor="let authorization of child.pickup_authorizations">
+            <div class="contact-row"><div><strong>{{ authorization.name }}</strong><span>{{ authorization.relationship || 'Personne autorisée' }}<ng-container *ngIf="authorization.phone"> · {{ authorization.phone }}</ng-container></span></div><span class="status-pill" [class.inactive]="!isPickupAuthorizationCurrentlyValid(authorization)">{{ isPickupAuthorizationCurrentlyValid(authorization) ? 'Valide' : authorization.status === 'ACTIVE' ? 'Hors période' : 'Révoquée' }}</span></div>
+            <div class="ecodim-modal-backdrop" *ngIf="pendingRevokeAuthorizationId === authorization.id" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="pendingRevokeAuthorizationId = ''">
+              <section class="form-panel ecodim-modal confirm-ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="revoke-title" (click)="$event.stopPropagation()">
+                <div class="panel-heading"><div><p class="eyebrow">SÉCURITÉ</p><h2 id="revoke-title">Révoquer l’autorisation ?</h2></div><button type="button" class="icon-button" aria-label="Fermer la fenêtre" (click)="pendingRevokeAuthorizationId = ''">×</button></div>
+                <p>La personne « {{ authorization.name }} » ne pourra plus récupérer l’enfant.</p>
+                <div class="form-actions"><button class="button button-light" type="button" (click)="pendingRevokeAuthorizationId = ''">Annuler</button><button class="button button-danger" type="button" [disabled]="saving" (click)="confirmRevokeAuthorization()">{{ saving ? 'Enregistrement…' : 'Confirmer la révocation' }}</button></div>
+              </section>
+            </div>
+            <button *ngIf="context?.can_manage && authorization.status === 'ACTIVE' && pendingRevokeAuthorizationId !== authorization.id" class="text-button danger-text revoke-button" type="button" (click)="pendingRevokeAuthorizationId = authorization.id">Révoquer l’accès</button>
+            <div class="ecodim-modal-backdrop" *ngIf="pendingHandoffId === authorization.id" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="pendingHandoffId = ''">
+              <section class="form-panel ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="handoff-title" (click)="$event.stopPropagation()">
+                <div class="panel-heading"><div><p class="eyebrow">JOURNAL DE SÉCURITÉ</p><h2 id="handoff-title">Confirmer la remise</h2></div><button type="button" class="icon-button" aria-label="Fermer la fenêtre" (click)="pendingHandoffId = ''">×</button></div>
+                <p>Confirmer la remise de <strong>{{ child.first_name }}</strong> à <strong>{{ authorization.name }}</strong> après vérification de son identité ?</p>
+                <label class="modal-field">Note de vérification (facultatif)<input name="handoffNote" [(ngModel)]="handoffNote" maxlength="500" /></label>
+                <div class="form-actions"><button class="button button-light" type="button" (click)="pendingHandoffId = ''">Annuler</button><button class="button button-primary" type="button" [disabled]="saving" (click)="confirmHandoff()">{{ saving ? 'Enregistrement…' : 'Confirmer la remise' }}</button></div>
+              </section>
+            </div>
+            <button *ngIf="isPickupAuthorizationCurrentlyValid(authorization) && pendingHandoffId !== authorization.id" class="button button-light handoff-button" type="button" (click)="pendingHandoffId = authorization.id">Enregistrer une remise</button>
+          </div>
+          <p class="empty-note" *ngIf="!child.pickup_authorizations.length">Aucune personne autorisée n’est enregistrée.</p>
+        </section>
+      </div>
+      <section class="detail-section handoff-history">
+        <div class="detail-title"><div><p class="eyebrow">JOURNAL DE SÉCURITÉ</p><h3>Historique des remises</h3></div></div>
+        <div class="handoff-history-row" *ngFor="let handoff of child.handoffs"><strong>{{ handoff.picked_up_by_name }}</strong><span>{{ handoff.handed_off_at | date:'dd/MM/yyyy à HH:mm' }}</span><small *ngIf="handoff.verification_note">{{ handoff.verification_note }}</small></div>
+        <p class="empty-note" *ngIf="!child.handoffs.length">Aucune remise enregistrée pour cet enfant.</p>
+      </section>
+    </ng-container>
+  </section>
+
+  <div class="loading-state" *ngIf="loading"><span class="spinner"></span>Chargement des données ECODIM…</div>
+
+  <ng-container *ngIf="!loading && selectedTab === 'overview' && dashboard">
+    <div class="ecodim-dashboard-layout">
+      <div class="dashboard-main-column">
+        <section class="stat-grid" aria-label="Indicateurs ECODIM">
+          <article class="stat-card"><span class="stat-icon">♟</span><span class="stat-label">Total enfants / adolescents</span><strong>{{ dashboard.summary.active_children }}</strong><span class="stat-trend">↑ Effectifs actifs</span></article>
+          <article class="stat-card"><span class="stat-icon green">♟</span><span class="stat-label">Enfants (3–11 ans)</span><strong>{{ dashboard.summary.children_3_11 }}</strong><span class="stat-trend">Inscrits actuellement</span></article>
+          <article class="stat-card"><span class="stat-icon violet">♟</span><span class="stat-label">Adolescents (12–17 ans)</span><strong>{{ dashboard.summary.adolescents_12_17 }}</strong><span class="stat-trend">Inscrits actuellement</span></article>
+          <article class="stat-card"><span class="stat-icon amber">♧</span><span class="stat-label">Responsables</span><strong>{{ dashboard.summary.responsibles }}</strong><span class="stat-trend">Contacts enregistrés</span></article>
+          <article class="stat-card"><span class="stat-icon rose">♡</span><span class="stat-label">Activités en cours</span><strong>{{ dashboard.summary.activities_in_progress }}</strong><span class="stat-trend">Séances en cours</span></article>
+        </section>
+
+        <section class="analytics-grid">
+          <article class="panel chart-panel">
+            <div class="panel-heading"><div><h2>Évolution des effectifs</h2><div class="chart-legend"><span><i></i>Enfants (3–11 ans)</span><span><i class="teen-dot"></i>Adolescents (12–17 ans)</span></div></div><span class="panel-period">6 derniers mois</span></div>
+            <div class="line-chart" *ngIf="dashboard.registrations_by_month.length">
+              <div class="chart-y-labels"><span>{{ maxRegistrationCount }}</span><span>{{ (maxRegistrationCount / 2) | number:'1.0-0' }}</span><span>0</span></div>
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-label="Évolution mensuelle des nouvelles inscriptions">
+                <line x1="0" y1="17" x2="100" y2="17"></line><line x1="0" y1="49" x2="100" y2="49"></line><line x1="0" y1="82" x2="100" y2="82"></line>
+                <polyline class="children-series" [attr.points]="registrationLine('children')"></polyline>
+                <polyline class="teen-series" [attr.points]="registrationLine('adolescents')"></polyline>
+              </svg>
+              <div class="chart-x-labels"><span *ngFor="let month of dashboard.registrations_by_month">{{ month.label }}</span></div>
+            </div>
+            <p class="chart-empty" *ngIf="!dashboard.registrations_by_month.length">Aucune inscription enregistrée sur cette période.</p>
+          </article>
+
+          <article class="panel age-panel">
+            <div class="panel-heading"><div><h2>Répartition par tranche d’âge</h2></div></div>
+            <div class="age-donut-wrap">
+              <div class="age-donut" [style.background]="ageDonutBackground"><div><strong>{{ dashboard.summary.active_children }}</strong><span>Enfants / Ados</span></div></div>
+              <div class="age-legend"><div *ngFor="let group of dashboard.age_distribution; let i = index"><i [class]="'age-color age-color-' + i"></i><span>{{ group.label === 'unknown' ? 'Non renseigné' : group.label === 'other' ? 'Autres âges' : group.label + ' ans' }}</span><strong>{{ group.count }}</strong></div></div>
+            </div>
+          </article>
+        </section>
+
+        <section class="dashboard-bottom-grid">
+          <article class="panel table-panel">
+            <div class="panel-heading">
+              <div><h2>Enfants / Adolescents récents</h2></div>
+              <button class="text-button" type="button" (click)="setTab('children')">Voir tout <span>→</span></button>
+            </div>
+            <form class="dashboard-search" (ngSubmit)="searchDashboardChildren()"><span aria-hidden="true">⌕</span><input name="dashboardChildSearch" [(ngModel)]="search" placeholder="Rechercher un enfant…" aria-label="Rechercher un enfant" /><button type="submit" aria-label="Lancer la recherche">⌕</button></form>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>Nom complet</th><th>Âge</th><th>Genre</th><th>Groupe / classe</th><th>Responsable</th><th>Statut</th><th>Actions</th></tr></thead>
+                <tbody>
+                  <tr *ngFor="let child of dashboard.recent_children" (click)="openChild(child)">
+                    <td><span class="avatar">{{ child.first_name.charAt(0) }}{{ child.last_name.charAt(0) }}</span><span class="child-name">{{ child.first_name }} {{ child.last_name }}</span></td>
+                    <td>{{ child.age === null ? '—' : child.age + ' ans' }}</td>
+                    <td>{{ child.gender === 'F' ? 'Féminin' : child.gender === 'M' ? 'Masculin' : '—' }}</td>
+                    <td>{{ child.current_class_name || '—' }}</td>
+                    <td>{{ child.primary_guardian_name || '—' }}</td>
+                    <td><span class="status-pill" [class.inactive]="child.status !== 'ACTIVE'">{{ child.status === 'ACTIVE' ? 'Actif' : child.status === 'INACTIVE' ? 'Inactif' : 'Archivé' }}</span></td>
+                    <td><button class="row-action" type="button" aria-label="Ouvrir le dossier" (click)="$event.stopPropagation(); openChild(child)">•••</button></td>
+                  </tr>
+                  <tr *ngIf="!dashboard.recent_children.length"><td colspan="7" class="empty-cell">Aucun dossier enfant pour le moment.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-footer"><span>Affichage de {{ dashboard.recent_children.length }} dossier(s) récent(s) sur {{ dashboard.summary.active_children }}</span><button class="text-button" type="button" (click)="setTab('children')">Consulter tous les dossiers</button></div>
+          </article>
+
+          <article class="panel compact-panel upcoming-panel">
+            <div class="panel-heading"><div><h2>Prochaines séances</h2></div><button class="text-button" type="button" *ngIf="context?.can_manage" (click)="showSessionForm = true">Programmer</button></div>
+            <div class="session-list">
+              <div class="session-item" *ngFor="let session of dashboard.upcoming_sessions">
+                <div class="session-date"><strong>{{ session.starts_at | date:'dd' }}</strong><small>{{ session.starts_at | date:'MMM' }}</small></div>
+                <div class="session-info"><strong>{{ session.title }}</strong><span>{{ session.class_name || 'Toutes les classes' }}<ng-container *ngIf="session.location"> · {{ session.location }}</ng-container></span><small>{{ session.starts_at | date:'EEEE d MMMM, HH:mm' }}</small></div>
+              </div>
+              <p class="empty-note" *ngIf="!dashboard.upcoming_sessions.length">Aucune séance programmée.</p>
+            </div>
+          </article>
+        </section>
+      </div>
+
+      <aside class="dashboard-rail">
+        <article class="ecodim-promo"><p>ECODIM</p><strong>Des enfants et des jeunes pour une génération de lumière</strong><span>Accompagner chaque enfant dans son cheminement.</span></article>
+        <article class="panel compact-panel">
+          <div class="panel-heading"><h2>Actions rapides</h2></div>
+          <div class="quick-actions">
+            <button type="button" *ngIf="context?.can_manage" (click)="showChildForm = true"><span>♟</span>Ajouter un enfant</button>
+            <button type="button" *ngIf="context?.can_manage" (click)="showSessionForm = true"><span>▦</span>Inscrire à une activité</button>
+            <button type="button" *ngIf="context?.can_manage" (click)="showClassForm = true"><span>♧</span>Gérer les classes</button>
+            <button type="button" (click)="setTab('children')"><span>⌕</span>Rechercher un enfant</button>
+          </div>
+        </article>
+        <article class="panel compact-panel">
+          <div class="panel-heading"><h2>Dernières inscriptions</h2><button class="text-button" type="button" (click)="setTab('children')">Voir tout</button></div>
+          <div class="recent-list">
+            <button class="recent-item" type="button" *ngFor="let child of dashboard.recent_children" (click)="openChild(child)"><span class="avatar">{{ child.first_name.charAt(0) }}{{ child.last_name.charAt(0) }}</span><span><strong>{{ child.first_name }} {{ child.last_name }}</strong><small>{{ child.age === null ? 'Âge non renseigné' : child.age + ' ans' }} · {{ child.created_at | date:'dd MMM yyyy' }}</small></span><b>›</b></button>
+            <p class="empty-note" *ngIf="!dashboard.recent_children.length">Aucune inscription récente.</p>
+          </div>
+        </article>
+        <blockquote class="ecodim-verse"><strong>Grandissez dans la sagesse et dans la grâce.</strong><span>Un espace pour accompagner chaque enfant avec bienveillance.</span><small>ECODIM</small></blockquote>
+      </aside>
+    </div>
+  </ng-container>
+
+  <section class="panel data-panel" *ngIf="!loading && selectedTab === 'children'">
+    <div class="panel-heading"><div><p class="eyebrow">DOSSIERS ECODIM</p><h2>Enfants</h2><p class="panel-description">{{ childrenPage?.count || 0 }} dossier(s)</p></div><button *ngIf="context?.can_manage" class="button button-primary" type="button" (click)="showChildForm = !showChildForm">Ajouter un enfant</button></div>
+    <form class="search-row" (ngSubmit)="searchChildren()"><input name="childSearch" [(ngModel)]="search" placeholder="Rechercher par nom ou référence" aria-label="Rechercher un enfant" /><button class="button button-light" type="submit">Rechercher</button></form>
+    <div class="table-scroll">
+      <table><thead><tr><th>Enfant</th><th>Date de naissance</th><th>Âge</th><th>Groupe / classe</th><th>Responsable</th><th>Statut</th><th></th></tr></thead>
+        <tbody><tr *ngFor="let child of childrenPage?.results"><td><span class="avatar">{{ child.first_name.charAt(0) }}{{ child.last_name.charAt(0) }}</span><span class="child-name">{{ child.first_name }} {{ child.last_name }}</span><small class="reference">{{ child.reference }}</small></td><td>{{ child.date_of_birth ? (child.date_of_birth | date:'dd/MM/yyyy') : '—' }}</td><td>{{ child.age === null ? '—' : child.age + ' ans' }}</td><td>{{ child.current_class_name || '—' }}</td><td>{{ child.primary_guardian_name || '—' }}</td><td><span class="status-pill" [class.inactive]="child.status !== 'ACTIVE'">{{ child.status === 'ACTIVE' ? 'Actif' : child.status === 'INACTIVE' ? 'Inactif' : 'Archivé' }}</span></td><td><button class="text-button" type="button" (click)="openChild(child)">Fiche</button></td></tr>
+        <tr *ngIf="!childrenPage?.results?.length"><td colspan="7" class="empty-cell">Aucun enfant ne correspond à cette recherche.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="pagination"><button class="button button-light" type="button" [disabled]="!childrenPage?.previous" (click)="changePage(-1)">Précédent</button><span>Page {{ page }}</span><button class="button button-light" type="button" [disabled]="!childrenPage?.next" (click)="changePage(1)">Suivant</button></div>
+  </section>
+
+  <section class="panel data-panel" *ngIf="!loading && selectedTab === 'classes'">
+    <div class="panel-heading"><div><p class="eyebrow">ORGANISATION DES GROUPES</p><h2>Classes ECODIM</h2></div><button *ngIf="context?.can_manage" class="button button-primary" type="button" (click)="showClassForm = !showClassForm">Nouvelle classe</button></div>
+    <div class="class-cards">
+      <article class="class-card" *ngFor="let group of classes"><span class="class-marker"></span><div><h3>{{ group.name }}</h3><p>{{ group.level || 'Niveau non précisé' }}</p><span class="status-pill" [class.inactive]="group.status !== 'ACTIVE'">{{ group.status === 'ACTIVE' ? 'Active' : 'Archivée' }}</span></div><div class="class-card-count"><strong>{{ group.active_children_count || 0 }}</strong><small>enfant(s)<ng-container *ngIf="group.capacity"> / {{ group.capacity }}</ng-container></small></div><p class="class-description" *ngIf="group.description">{{ group.description }}</p></article>
+      <p class="empty-cell" *ngIf="!classes.length">Aucune classe n’a été créée.</p>
+    </div>
+  </section>
+
+  <section class="panel data-panel" *ngIf="!loading && selectedTab === 'staff'">
+    <div class="panel-heading">
+      <div><p class="eyebrow">ÉQUIPE ECODIM</p><h2>Personnel affecté</h2><p class="panel-description">{{ staff.length }} affectation(s)</p></div>
+      <button *ngIf="context?.can_manage" class="button button-primary" type="button" (click)="showStaffForm = true">Affecter un membre</button>
+    </div>
+    <div class="ecodim-modal-backdrop" *ngIf="showStaffForm && context?.can_manage" tabindex="-1" (keydown.escape)="closeEcodimModals()" (click)="showStaffForm = false">
+      <section class="form-panel ecodim-modal" role="dialog" aria-modal="true" aria-labelledby="staff-form-title" (click)="$event.stopPropagation()">
+        <div class="panel-heading"><div><p class="eyebrow">ÉQUIPE ECODIM</p><h2 id="staff-form-title">Affecter un membre</h2></div><button type="button" class="icon-button" aria-label="Fermer le formulaire" (click)="showStaffForm = false">×</button></div>
+        <form class="form-grid" (ngSubmit)="submitStaff()">
+          <label>Membre
+            <select name="staffMember" [(ngModel)]="staffForm.member" required>
+              <option value="">Sélectionner un membre</option>
+              <option *ngFor="let member of members" [value]="member.id">{{ member.first_name }} {{ member.last_name }}</option>
+            </select>
+          </label>
+          <label>Rôle
+            <select name="staffRole" [(ngModel)]="staffForm.role">
+              <option value="CHECK_IN">Pointage</option>
+              <option value="CHILD_SAFETY">Sécurité des enfants</option>
+              <option value="DIRECTOR">Direction ECODIM</option>
+            </select>
+          </label>
+          <div class="form-actions"><button class="button button-light" type="button" (click)="showStaffForm = false">Annuler</button><button class="button button-primary" type="submit" [disabled]="saving || !staffForm.member">{{ saving ? 'Enregistrement…' : 'Affecter' }}</button></div>
+        </form>
+      </section>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Membre</th><th>Rôle</th><th>Statut</th><th *ngIf="context?.can_manage">Action</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let assignment of staff">
+            <td>{{ assignment.member_name }}</td>
+            <td>{{ assignment.role === 'DIRECTOR' ? 'Direction ECODIM' : assignment.role === 'CHILD_SAFETY' ? 'Sécurité des enfants' : 'Pointage' }}</td>
+            <td><span class="status-pill" [class.inactive]="!assignment.is_active">{{ assignment.is_active ? 'Actif' : 'Inactif' }}</span></td>
+            <td *ngIf="context?.can_manage"><button class="text-button" type="button" (click)="toggleStaff(assignment)">{{ assignment.is_active ? 'Désactiver' : 'Réactiver' }}</button></td>
+          </tr>
+          <tr *ngIf="!staff.length"><td class="empty-cell" [attr.colspan]="context?.can_manage ? 4 : 3">Aucun membre n’est affecté à l’équipe ECODIM.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</main>

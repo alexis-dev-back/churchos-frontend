@@ -1,0 +1,14 @@
+<ng-container *ngIf="showApplicationShell; else publicPage">
+  <div class="app-shell">
+    <app-sidebar [open]="mobileMenuOpen" (closeSidebar)="mobileMenuOpen = false"></app-sidebar>
+
+    <div class="content-shell">
+      <app-topbar (menuToggle)="mobileMenuOpen = !mobileMenuOpen"></app-topbar>
+      <main class="page-content">
+        <router-outlet></router-outlet>
+      </main>
+    </div>
+  </div>
+</ng-container>
+
+<ng-template #publicPage><router-outlet></router-outlet></ng-template>

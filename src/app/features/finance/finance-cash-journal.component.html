@@ -1,0 +1,86 @@
+<main class="finance-page finance-journal-page">
+  <nav class="finance-breadcrumbs finance-no-print" aria-label="Fil d’Ariane">
+    <a routerLink="/finance">Finances</a><span>›</span><strong>Journal de caisse</strong>
+  </nav>
+
+  <header class="finance-heading finance-no-print">
+    <div class="finance-heading-title">
+      <span class="finance-title-icon" aria-hidden="true">↔</span>
+      <div><h1>Journal de caisse</h1><p>Traçabilité chronologique des encaissements et décaissements confirmés.</p></div>
+    </div>
+    <div class="finance-heading-filters">
+      <label class="finance-church-select" *ngIf="churches.length > 1">
+        <span class="visually-hidden">Église</span>
+        <select [(ngModel)]="selectedChurchId" (ngModelChange)="onChurchChange()">
+          <option *ngFor="let church of churches" [value]="church.church_id">{{ church.name }}</option>
+        </select>
+      </label>
+      <span class="finance-church-chip" *ngIf="churches.length === 1">{{ churches[0].name }}</span>
+      <a class="finance-secondary-button" routerLink="/finance/reports">Rapports financiers</a>
+    </div>
+  </header>
+
+  <p class="finance-feedback error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
+  <p class="finance-feedback" *ngIf="loading" role="status">Chargement du journal…</p>
+
+  <section class="finance-panel finance-report-filters finance-no-print">
+    <label>Du <input type="date" [(ngModel)]="startDate" /></label>
+    <label>Au <input type="date" [(ngModel)]="endDate" /></label>
+    <label>Caisse ou compte
+      <select [(ngModel)]="selectedAccountId">
+        <option value="">Tous les comptes</option>
+        <option *ngFor="let account of accounts" [value]="account.id">{{ account.name }} · {{ account.currency }}</option>
+      </select>
+    </label>
+    <label>Période financière
+      <select [(ngModel)]="selectedPeriodId">
+        <option value="">Toutes les périodes</option>
+        <option *ngFor="let period of periods" [value]="period.id">{{ period.name }}</option>
+      </select>
+    </label>
+    <button type="button" class="finance-primary-button" [disabled]="loading" (click)="loadJournal()">Afficher</button>
+    <button type="button" class="finance-secondary-button" [disabled]="!journal" (click)="printJournal()">Imprimer</button>
+  </section>
+
+  <section class="finance-journal-print" *ngIf="journal as data">
+    <header class="finance-report-title">
+      <div><p class="finance-report-eyebrow">CHURCHOS · TRÉSORERIE</p><h2>Journal de caisse</h2>
+        <p>{{ data.church_name }} · {{ data.start_date | date:'dd/MM/yyyy' }} au {{ data.end_date | date:'dd/MM/yyyy' }}</p>
+      </div>
+      <small>Écritures confirmées · {{ data.count }} mouvement(s)</small>
+    </header>
+
+    <div class="finance-journal-balances">
+      <article class="finance-panel" *ngFor="let opening of data.opening_balances">
+        <span>Solde d’ouverture · {{ opening.account_name }}</span><strong>{{ formatMoney(opening.balance, opening.currency) }}</strong>
+      </article>
+      <article class="finance-panel" *ngFor="let closing of data.closing_totals">
+        <span>Solde de clôture · {{ closing.account_name }}</span><strong>{{ formatMoney(closing.balance, closing.currency) }}</strong>
+      </article>
+    </div>
+    <div class="finance-journal-totals">
+      <div><span>Total des entrées</span><strong *ngFor="let total of data.total_in">{{ formatMoney(total.amount, total.currency) }}</strong><strong *ngIf="!data.total_in.length">—</strong></div>
+      <div><span>Total des sorties</span><strong *ngFor="let total of data.total_out">{{ formatMoney(total.amount, total.currency) }}</strong><strong *ngIf="!data.total_out.length">—</strong></div>
+    </div>
+
+    <div class="finance-journal-table-wrap">
+      <table class="finance-journal-table">
+        <thead><tr><th>Date d’écriture</th><th>Date opération</th><th>Compte</th><th>Libellé</th><th>Référence / moyen</th><th class="numeric">Entrée</th><th class="numeric">Sortie</th><th class="numeric">Solde après mouvement</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let movement of data.results">
+            <td>{{ movement.created_at | date:'dd/MM/yyyy HH:mm' }}</td>
+            <td>{{ movement.transaction_date | date:'dd/MM/yyyy' }}</td>
+            <td>{{ movement.account_name }}</td>
+            <td><strong>{{ movement.category_name }}</strong><small class="finance-table-subtitle">{{ movement.description || movement.counterparty_name || '—' }}</small></td>
+            <td>{{ movement.payment_reference || movement.transaction_reference || '—' }}<small class="finance-table-subtitle">{{ paymentMethodLabel(movement.payment_method) }}</small></td>
+            <td class="numeric finance-amount-in">{{ movement.direction === 'IN' ? formatMoney(movement.amount, movement.currency) : '—' }}</td>
+            <td class="numeric finance-amount-out">{{ movement.direction === 'OUT' ? formatMoney(movement.amount, movement.currency) : '—' }}</td>
+            <td class="numeric">{{ formatMoney(movement.balance_after, movement.currency) }}</td>
+          </tr>
+          <tr *ngIf="!data.results.length"><td colspan="8" class="finance-empty-journal">Aucun mouvement de trésorerie confirmé pour les filtres choisis.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <footer class="finance-report-footer">Journal immuable des mouvements confirmés · {{ data.church_name }}</footer>
+  </section>
+</main>

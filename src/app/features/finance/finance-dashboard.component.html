@@ -1,0 +1,421 @@
+<main class="finance-page">
+  <nav class="finance-breadcrumbs" aria-label="Fil d’Ariane">
+    <a routerLink="/dashboard">Accueil</a><span>›</span><strong>Finances</strong>
+  </nav>
+
+  <header class="finance-heading">
+    <div class="finance-heading-title">
+      <span class="finance-title-icon" aria-hidden="true">▤</span>
+      <div>
+        <h1>Finances</h1>
+        <p>Gérez les dons, les dépenses, les budgets et suivez la situation financière de votre église.</p>
+      </div>
+    </div>
+    <div class="finance-heading-filters">
+      <span class="finance-period-chip">◷ {{ openPeriod ? formatPeriod(openPeriod) : 'Aucune période ouverte' }}</span>
+      <label class="finance-church-select" *ngIf="churches.length > 1">
+        <span class="visually-hidden">Église active</span>
+        <select [(ngModel)]="selectedChurchId" (ngModelChange)="onChurchChange()">
+          <option *ngFor="let church of churches" [value]="church.church_id">{{ church.name }}</option>
+        </select>
+      </label>
+      <span class="finance-church-chip" *ngIf="churches.length === 1">{{ churches[0].name }}</span>
+    </div>
+  </header>
+
+  <p class="finance-feedback error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
+  <p class="finance-feedback success" *ngIf="successMessage" role="status">{{ successMessage }}</p>
+  <p class="finance-feedback" *ngIf="loading" role="status">Chargement de votre espace financier…</p>
+
+  <ng-container *ngIf="!loading && selectedChurchId">
+    <div class="finance-layout">
+      <section class="finance-main">
+        <div class="finance-metrics">
+          <article class="finance-metric-card">
+            <span class="finance-metric-icon green">＋</span>
+            <span class="finance-metric-label">Total des dons</span>
+            <strong>{{ formatMoney(summary?.income_total) }}</strong>
+            <span class="finance-metric-note">Encaissements confirmés</span>
+          </article>
+          <article class="finance-metric-card">
+            <span class="finance-metric-icon blue">↗</span>
+            <span class="finance-metric-label">Total des dépenses</span>
+            <strong>{{ formatMoney(summary?.expense_total) }}</strong>
+            <span class="finance-metric-note">Paiements confirmés</span>
+          </article>
+          <article class="finance-metric-card">
+            <span class="finance-metric-icon purple">◈</span>
+            <span class="finance-metric-label">Solde disponible</span>
+            <strong>{{ formatMoney(summary?.available_balance) }}</strong>
+            <span class="finance-metric-note">{{ summary?.pending_transactions || 0 }} opération(s) en attente</span>
+          </article>
+          <article class="finance-metric-card">
+            <span class="finance-metric-icon orange">▣</span>
+            <span class="finance-metric-label">Gestion financière</span>
+            <strong class="finance-config-value">{{ configuration ? levelLabel(configuration.level) : 'À configurer' }}</strong>
+            <span class="finance-metric-note">{{ configuration ? 'Devise ' + configuration.base_currency + ' · version ' + configuration.version : 'Initialisez le module pour commencer.' }}</span>
+          </article>
+        </div>
+
+        <div class="finance-panels-row">
+          <section class="finance-panel finance-trend-panel">
+            <header class="finance-panel-heading">
+              <div><h2>Évolution des dons et dépenses</h2><p>Suivi mensuel des mouvements financiers</p></div>
+              <span class="finance-legend"><i class="donation-dot"></i>Dons <i class="expense-dot"></i>Dépenses</span>
+            </header>
+            <div class="finance-chart-placeholder">
+              <div class="finance-chart-scale"><span>{{ summary?.currency }}</span><span> </span><span> </span><span> </span><span>0</span></div>
+              <div class="finance-chart-area">
+                <div class="finance-chart-grid"></div>
+                <div class="finance-month-bars" *ngIf="summary?.monthly?.length; else noMonthlyData">
+                  <div class="finance-month-bar" *ngFor="let month of summary?.monthly">
+                    <div class="finance-bar-pair">
+                      <i class="income-bar" [style.height.%]="chartBarHeight(month.income)" [title]="'Dons ' + formatMoney(month.income)"></i>
+                      <i class="expense-bar" [style.height.%]="chartBarHeight(month.expenses)" [title]="'Dépenses ' + formatMoney(month.expenses)"></i>
+                    </div>
+                    <small>{{ month.month.slice(5) }}</small>
+                  </div>
+                </div>
+                <ng-template #noMonthlyData><p>Aucun paiement confirmé sur la période.</p></ng-template>
+              </div>
+            </div>
+          </section>
+
+          <section class="finance-panel finance-allocation-panel">
+            <header class="finance-panel-heading"><div><h2>Répartition des fonds</h2><p>Catégories de dons</p></div></header>
+            <div class="finance-category-shares" *ngIf="summary?.income_by_category?.length; else noIncomeCategories">
+              <div class="finance-category-row" *ngFor="let category of (summary?.income_by_category ?? []).slice(0, 5)">
+                <span class="finance-category-dot"></span><span>{{ category.category_name }}</span><strong>{{ categoryShare(category.amount) | number:'1.0-0' }}%</strong>
+                <div class="finance-category-track"><i [style.width.%]="categoryShare(category.amount)"></i></div>
+              </div>
+            </div>
+            <ng-template #noIncomeCategories><div class="finance-empty-chart"><span>—</span><p>Aucun don confirmé à répartir.</p></div></ng-template>
+          </section>
+        </div>
+
+        <div class="finance-panels-row finance-data-row">
+          <section class="finance-panel">
+            <header class="finance-panel-heading">
+              <div><h2>Derniers dons</h2><p>Déclarés et confirmés</p></div>
+              <button class="finance-text-action" *ngIf="canRecordIncome && configuration" type="button" (click)="openTransactionForm('INCOME')">Enregistrer un don</button>
+            </header>
+            <div class="finance-transaction-list" *ngIf="recentDonations.length; else noDonations">
+              <article class="finance-transaction-row" *ngFor="let item of recentDonations">
+                <span class="finance-recent-icon">＋</span>
+                <div><strong>{{ item.category_name }}</strong><small>{{ item.member_name || item.counterparty_name || (item.is_anonymous ? 'Don anonyme' : item.description || 'Donateur non précisé') }} · {{ item.transaction_date | date:'d MMM y' }}</small></div>
+                <strong class="finance-amount-in">{{ formatMoney(item.amount, item.currency) }}</strong>
+                <button *ngIf="item.status === 'TO_VERIFY' && canSettle" class="finance-small-action" type="button" (click)="openPaymentForm(item)">Confirmer</button>
+                <span *ngIf="item.status !== 'TO_VERIFY'" class="finance-status" [class.closed]="item.status !== 'PAID'">{{ transactionStatusLabel(item.status) }}</span>
+              </article>
+            </div>
+            <ng-template #noDonations><div class="finance-empty-table compact"><p>Aucun don enregistré.</p></div></ng-template>
+          </section>
+
+          <section class="finance-panel finance-budget-panel">
+            <header class="finance-panel-heading">
+              <div><h2>Budgets par catégorie</h2><p>Engagé, payé et disponible</p></div>
+              <button class="finance-text-action" *ngIf="canManageBudget && configuration && openPeriod" type="button" (click)="openBudgetForm()">Créer</button>
+            </header>
+            <div class="finance-budget-list" *ngIf="budgets.length; else noBudgets">
+              <article class="finance-budget-row" *ngFor="let budget of budgets">
+                <div class="finance-budget-title"><strong>{{ budget.name }}</strong><small>{{ budget.category_name }} · {{ budget.currency }}</small></div>
+                <div class="finance-budget-values"><span>Budget {{ formatMoney(budget.allocated_amount, budget.currency) }}</span><span>Engagé {{ formatMoney(budget.committed_amount, budget.currency) }}</span></div>
+                <div class="finance-budget-track"><i [style.width.%]="budgetPercent(budget)"></i></div>
+                <button *ngIf="canManageBudget" class="finance-text-action" type="button" (click)="openBudgetRevision(budget)">Réviser</button>
+              </article>
+            </div>
+            <ng-template #noBudgets><div class="finance-empty-table compact"><p>Aucun budget créé pour cette période.</p></div></ng-template>
+          </section>
+        </div>
+
+        <div class="finance-panels-row finance-data-row">
+          <section class="finance-panel finance-periods-panel">
+            <header class="finance-panel-heading">
+              <div><h2>Périodes financières</h2><p>Exercices définis pour cette église</p></div>
+              <button *ngIf="canCreatePeriod && configuration && !configuration.is_suspended" class="finance-text-action" type="button" (click)="openPeriodForm()">Nouvelle période</button>
+            </header>
+            <div class="finance-period-list" *ngIf="periods.length; else noPeriods">
+              <article class="finance-period-row" *ngFor="let period of periods">
+                <span class="finance-period-mark">◷</span>
+                <div><strong>{{ period.name }}</strong><small>{{ formatPeriod(period) }}</small></div>
+                <span class="finance-status" [class.closed]="period.status === 'CLOSED'">{{ period.status === 'OPEN' ? 'Ouverte' : 'Clôturée' }}</span>
+                <button *ngIf="canCreatePeriod" class="finance-small-action" type="button" (click)="togglePeriod(period)">{{ period.status === 'OPEN' ? 'Clôturer' : 'Réouvrir' }}</button>
+              </article>
+            </div>
+            <ng-template #noPeriods>
+              <div class="finance-empty-table compact">
+                <p>Aucune période financière n’a été créée.</p>
+                <small *ngIf="!configuration">Configurez d’abord le module financier.</small>
+                <small *ngIf="configuration">Créez une période pour préparer les opérations.</small>
+              </div>
+            </ng-template>
+          </section>
+          <section class="finance-panel finance-level-panel">
+            <header class="finance-panel-heading"><div><h2>Niveau de gestion</h2><p>Configuration active</p></div></header>
+            <div class="finance-level-content" *ngIf="configuration; else setupFinance">
+              <span class="finance-level-icon">▤</span>
+              <div><strong>{{ levelLabel(configuration.level) }}</strong><span>Devise de base : {{ configuration.base_currency }}</span><span>Version {{ configuration.version }}</span></div>
+              <span class="finance-status" [class.closed]="configuration.is_suspended">{{ configuration.is_suspended ? 'Suspendue' : 'Active' }}</span>
+            </div>
+            <ng-template #setupFinance>
+              <div class="finance-empty-table compact"><p>Le niveau financier de cette église n’a pas encore été choisi.</p></div>
+            </ng-template>
+          </section>
+        </div>
+
+        <div class="finance-panels-row finance-data-row">
+          <section class="finance-panel">
+            <header class="finance-panel-heading">
+              <div><h2>Opérations à traiter</h2><p>Approbation, confirmation et paiement</p></div>
+              <span class="finance-pending-count">{{ pendingTransactions.length + pendingPayments.length }}</span>
+            </header>
+            <div class="finance-transaction-list" *ngIf="pendingTransactions.length; else noPendingTransactions">
+              <article class="finance-transaction-row" *ngFor="let item of pendingTransactions">
+                <span class="finance-recent-icon" [class.closed]="item.kind === 'EXPENSE'">↗</span>
+                <div><strong>{{ item.kind === 'INCOME' ? 'Don' : item.category_name }} · {{ item.description || item.counterparty_name || item.category_name }}</strong><small>{{ item.transaction_date | date:'d MMM y' }} · {{ formatMoney(item.amount, item.currency) }}</small></div>
+                <span class="finance-status">{{ transactionStatusLabel(item.status) }}</span>
+                <button *ngIf="item.status === 'PENDING_APPROVAL' && canApprove" class="finance-small-action" type="button" (click)="openApproval(item, 'approve')">Approuver</button>
+                <button *ngIf="item.status === 'PENDING_APPROVAL' && canApprove" class="finance-small-action danger" type="button" (click)="openApproval(item, 'reject')">Rejeter</button>
+                <button *ngIf="item.status === 'APPROVED' && canSettle" class="finance-small-action" type="button" (click)="openPaymentForm(item)">Payer</button>
+                <button *ngIf="item.kind === 'INCOME' && item.status === 'TO_VERIFY' && canSettle" class="finance-small-action" type="button" (click)="openPaymentForm(item)">Confirmer</button>
+              </article>
+            </div>
+            <ng-template #noPendingTransactions><p class="finance-aside-empty">Aucune opération en attente d’approbation ou de confirmation.</p></ng-template>
+            <div class="finance-transaction-list" *ngIf="pendingPayments.length">
+              <article class="finance-transaction-row" *ngFor="let payment of pendingPayments">
+                <span class="finance-recent-icon">◷</span>
+                <div><strong>Paiement en attente · {{ payment.transaction_description || payment.transaction_kind }}</strong><small>{{ payment.account_name }} · {{ formatMoney(payment.amount, payment.currency) }}</small></div>
+                <button *ngIf="canSettle" class="finance-small-action" type="button" (click)="openPaymentDecision(payment, true)">Confirmer exécution</button>
+                <button *ngIf="canSettle" class="finance-small-action danger" type="button" (click)="openPaymentDecision(payment, false)">Rejeter</button>
+              </article>
+            </div>
+          </section>
+          <section class="finance-panel">
+            <header class="finance-panel-heading">
+              <div><h2>Caisses et comptes</h2><p>Soldes suivis par support</p></div>
+              <button *ngIf="canSettle && configuration" class="finance-text-action" type="button" (click)="openAccountForm()">Ajouter un compte</button>
+            </header>
+            <article class="finance-period-row" *ngFor="let account of accounts">
+              <span class="finance-period-mark">{{ account.kind === 'CASH' ? '¤' : '▤' }}</span>
+              <div><strong>{{ account.name }}</strong><small>{{ account.kind }} · {{ account.currency }}</small></div>
+              <strong>{{ formatMoney(account.balance, account.currency) }}</strong>
+            </article>
+            <p class="finance-aside-empty" *ngIf="!accounts.length">Aucune caisse n’est configurée.</p>
+            <header class="finance-panel-heading finance-funds-heading">
+              <div><h2>Fonds affectés</h2><p>Finalités des dons et dépenses</p></div>
+              <button *ngIf="canConfigure && configuration" class="finance-text-action" type="button" (click)="openFundForm()">Ajouter</button>
+            </header>
+            <article class="finance-period-row" *ngFor="let fund of funds">
+              <span class="finance-period-mark">◇</span>
+              <div><strong>{{ fund.name }}</strong><small>{{ fund.is_restricted ? 'Fonds affecté' : 'Fonds non affecté' }}</small></div>
+            </article>
+            <p class="finance-aside-empty" *ngIf="!funds.length">Aucun fonds n’est défini.</p>
+          </section>
+        </div>
+      </section>
+
+      <aside class="finance-aside">
+        <section class="finance-verse-card">
+          <span class="verse-decoration" aria-hidden="true">✦</span>
+          <h2>Chaque don est une semence pour l’œuvre de Dieu</h2>
+          <p>« Que chacun donne comme il l’a décidé en son cœur, sans tristesse ni contrainte. »</p>
+          <small>2 Corinthiens 9:7</small>
+        </section>
+
+        <section class="finance-panel finance-actions-panel">
+          <header class="finance-panel-heading"><div><h2>Actions rapides</h2></div></header>
+          <div class="finance-quick-actions">
+            <button type="button" class="finance-quick-action income" [disabled]="!canRecordIncome || !configuration || !openPeriod" (click)="openTransactionForm('INCOME')">
+              <span class="finance-quick-icon">＋</span><strong>Enregistrer un don</strong><small>Déclarer une recette</small>
+            </button>
+            <button type="button" class="finance-quick-action expense" [disabled]="!canRecordExpense || !configuration || !openPeriod" (click)="openTransactionForm('EXPENSE')">
+              <span class="finance-quick-icon">↗</span><strong>Demander une dépense</strong><small>Soumettre à approbation</small>
+            </button>
+            <button type="button" class="finance-quick-action budget" [disabled]="!canManageBudget || !configuration || !openPeriod" (click)="openBudgetForm()">
+              <span class="finance-quick-icon">▣</span><strong>Créer un budget</strong><small>Planifier les dépenses</small>
+            </button>
+            <button type="button" class="finance-quick-action settings" *ngIf="canConfigure" (click)="openConfiguration()">
+              <span class="finance-quick-icon">⚙</span><strong>{{ configuration ? 'Configurer les finances' : 'Initialiser les finances' }}</strong><small>Paramètres et devise</small>
+            </button>
+            <button type="button" class="finance-quick-action period" *ngIf="canCreatePeriod && configuration && !configuration.is_suspended" (click)="openPeriodForm()">
+              <span class="finance-quick-icon">◷</span><strong>Créer une période</strong><small>Ouvrir un exercice</small>
+            </button>
+          </div>
+          <p class="finance-action-note">Les recettes sont confirmées par la trésorerie ; les dépenses suivent une approbation et un paiement séparés.</p>
+        </section>
+
+        <section class="finance-panel finance-recent-panel">
+          <header class="finance-panel-heading"><div><h2>Périodes récentes</h2></div></header>
+          <article class="finance-recent-row" *ngFor="let period of periods.slice(0, 4)">
+            <span class="finance-recent-icon" [class.closed]="period.status === 'CLOSED'">◷</span>
+            <div><strong>{{ period.name }}</strong><small>{{ formatPeriod(period) }}</small></div>
+            <span class="finance-recent-status">{{ period.status === 'OPEN' ? 'Ouverte' : 'Clôturée' }}</span>
+          </article>
+          <p class="finance-aside-empty" *ngIf="!periods.length">Les périodes financières apparaîtront ici.</p>
+        </section>
+
+        <section class="finance-scripture-card">
+          <span>Gérer avec sagesse,<br />c’est aussi servir Dieu.</span>
+          <small>Votre gestion, au service de la mission.</small>
+        </section>
+      </aside>
+    </div>
+  </ng-container>
+
+  <div class="finance-modal-backdrop" *ngIf="modal" (click)="closeModal()" (keydown.escape)="closeModal()">
+    <section class="finance-modal" role="dialog" aria-modal="true" aria-labelledby="finance-modal-title" (click)="$event.stopPropagation()">
+      <header class="finance-modal-heading">
+        <div>
+          <p class="finance-modal-eyebrow">GESTION FINANCIÈRE</p>
+          <h2 id="finance-modal-title">
+            {{ modal === 'configuration' ? (configuration ? 'Modifier la configuration' : 'Initialiser les finances') :
+              modal === 'period' ? 'Créer une période' :
+              modal === 'income' ? 'Enregistrer un don' :
+              modal === 'expense' ? 'Demander une dépense' :
+              modal === 'payment' ? (selectedTransaction?.kind === 'INCOME' ? 'Confirmer l’encaissement' : 'Initier un paiement') :
+              modal === 'approval' ? (approvalDecision === 'approve' ? 'Approuver la dépense' : 'Rejeter la dépense') :
+              modal === 'pending-payment' ? (paymentDecisionConfirmed ? 'Confirmer l’exécution' : 'Rejeter le paiement') :
+              modal === 'budget' ? 'Créer un budget' :
+              modal === 'revision' ? 'Réviser le budget' :
+              modal === 'account' ? 'Ajouter une caisse ou un compte' :
+              modal === 'fund' ? 'Créer un fonds affecté' :
+              periodAction === 'close' ? 'Clôturer la période' : 'Réouvrir la période' }}
+          </h2>
+        </div>
+        <button type="button" aria-label="Fermer" [disabled]="saving" (click)="closeModal()">×</button>
+      </header>
+      <form *ngIf="modal === 'configuration'" class="finance-form" (ngSubmit)="saveConfiguration()">
+        <label>Niveau de gestion *
+          <select name="financeLevel" [(ngModel)]="configurationForm.level" required>
+            <option [ngValue]="1">Niveau 1 — Trésorerie simple</option>
+            <option [ngValue]="2">Niveau 2 — Gestion intermédiaire</option>
+            <option [ngValue]="3">Niveau 3 — Comptabilité avancée</option>
+          </select>
+        </label>
+        <label>Devise de base *
+          <input name="financeCurrency" [(ngModel)]="configurationForm.base_currency" required minlength="3" maxlength="3" pattern="[A-Za-z]{3}" />
+        </label>
+        <label>Motif de la configuration *
+          <textarea name="financeReason" [(ngModel)]="configurationForm.reason" required maxlength="500" rows="3" placeholder="Expliquez la création ou l’évolution de la configuration"></textarea>
+        </label>
+        <p class="finance-form-hint">Chaque modification est historisée avec sa version et son motif.</p>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || !configurationForm.reason.trim()">{{ saving ? 'Enregistrement…' : 'Enregistrer la configuration' }}</button></div>
+      </form>
+      <form *ngIf="modal === 'period'" class="finance-form" (ngSubmit)="savePeriod()">
+        <label>Nom de la période *
+          <input name="periodName" [(ngModel)]="periodForm.name" required maxlength="100" />
+        </label>
+        <div class="finance-date-fields">
+          <label>Date de début *<input name="periodStart" [(ngModel)]="periodForm.starts_on" type="date" required /></label>
+          <label>Date de fin *<input name="periodEnd" [(ngModel)]="periodForm.ends_on" type="date" required [min]="periodForm.starts_on" /></label>
+        </div>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || !periodForm.name.trim() || !periodForm.starts_on || !periodForm.ends_on || periodForm.ends_on < periodForm.starts_on">{{ saving ? 'Enregistrement…' : 'Créer la période' }}</button></div>
+      </form>
+      <form *ngIf="modal === 'income' || modal === 'expense'" class="finance-form" (ngSubmit)="saveTransaction()">
+        <label>Catégorie *
+          <select name="transactionCategory" [(ngModel)]="transactionForm.category_id" required>
+            <option *ngFor="let category of modal === 'income' ? incomeCategories : expenseCategories" [value]="category.id">{{ category.name }}</option>
+          </select>
+        </label>
+        <label>Fonds affecté
+          <select name="transactionFund" [(ngModel)]="transactionForm.fund_id">
+            <option value="">Aucun fonds</option>
+            <option *ngFor="let fund of availableFunds" [value]="fund.id">{{ fund.name }}</option>
+          </select>
+        </label>
+        <label>{{ modal === 'income' ? 'Contributeur (facultatif)' : 'Bénéficiaire / fournisseur' }}
+          <input name="transactionCounterparty" [(ngModel)]="transactionForm.counterparty_name" maxlength="160" [required]="modal === 'expense'" />
+        </label>
+        <label class="finance-checkbox" *ngIf="modal === 'income'"><input name="anonymousDonation" type="checkbox" [(ngModel)]="transactionForm.is_anonymous" /> Don anonyme</label>
+        <label>Description *<textarea name="transactionDescription" [(ngModel)]="transactionForm.description" maxlength="500" rows="2" required></textarea></label>
+        <div class="finance-date-fields">
+          <label>Montant *<input name="transactionAmount" [(ngModel)]="transactionForm.amount" type="number" min="0.01" step="0.01" required /></label>
+          <label>Devise *<input name="transactionCurrency" [(ngModel)]="transactionForm.currency" minlength="3" maxlength="3" pattern="[A-Za-z]{3}" required /></label>
+        </div>
+        <div class="finance-date-fields">
+          <label>Date de l’opération *<input name="transactionDate" [(ngModel)]="transactionForm.transaction_date" type="date" required /></label>
+          <label>Référence<input name="transactionReference" [(ngModel)]="transactionForm.reference" maxlength="80" /></label>
+        </div>
+        <label *ngIf="transactionForm.currency.toUpperCase() !== configuration?.base_currency">Taux de change vers {{ configuration?.base_currency }} *
+          <input name="transactionExchangeRate" [(ngModel)]="transactionForm.exchange_rate_to_base" type="number" min="0.000001" step="0.000001" required />
+        </label>
+        <p class="finance-form-hint" *ngIf="modal === 'income'">Le don n’affectera le solde qu’après confirmation d’encaissement par une personne habilitée.</p>
+        <p class="finance-form-hint" *ngIf="modal === 'expense'">La dépense sera soumise à approbation avant l’initiation du paiement.</p>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || !transactionForm.amount || !transactionForm.description.trim()">{{ saving ? 'Enregistrement…' : 'Enregistrer' }}</button></div>
+      </form>
+      <form *ngIf="modal === 'payment'" class="finance-form" (ngSubmit)="savePaymentInitiation()">
+        <p class="finance-form-hint" *ngIf="selectedTransaction?.kind === 'INCOME'">Montant déclaré : {{ selectedTransaction?.amount }} {{ selectedTransaction?.currency }}. La confirmation crédite la caisse.</p>
+        <label>Caisse ou compte *
+          <select name="paymentAccount" [(ngModel)]="paymentForm.account_id" required>
+            <option *ngFor="let account of activeAccounts" [value]="account.id" [disabled]="account.currency !== selectedTransaction?.currency">{{ account.name }} · {{ account.currency }} ({{ formatMoney(account.balance, account.currency) }})</option>
+          </select>
+        </label>
+        <label>Montant *<input name="paymentAmount" [(ngModel)]="paymentForm.amount" type="number" min="0.01" step="0.01" [max]="selectedTransaction?.remaining_amount ?? null" required [readonly]="selectedTransaction?.kind === 'INCOME'" /></label>
+        <label>Moyen de paiement *
+          <select name="paymentMethod" [(ngModel)]="paymentForm.method" required>
+            <option value="CASH">Espèces</option><option value="BANK_TRANSFER">Virement</option><option value="MOBILE_MONEY">Mobile Money</option><option value="CHEQUE">Chèque</option><option value="ONLINE">Paiement en ligne</option><option value="CARD">Carte</option><option value="OTHER">Autre</option>
+          </select>
+        </label>
+        <label>Référence de paiement<input name="paymentReference" [(ngModel)]="paymentForm.reference" maxlength="100" /></label>
+        <p class="finance-form-hint" *ngIf="selectedTransaction?.kind === 'EXPENSE'">Initier un paiement ne confirme pas son exécution. Le solde ne change qu’après confirmation par un autre responsable habilité.</p>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || !paymentForm.account_id || !paymentForm.amount">{{ saving ? 'Traitement…' : (selectedTransaction?.kind === 'INCOME' ? 'Confirmer encaissement' : 'Initier le paiement') }}</button></div>
+      </form>
+      <form *ngIf="modal === 'approval'" class="finance-form" (ngSubmit)="saveExpenseDecision()">
+        <p class="finance-form-hint">{{ selectedTransaction?.description }} · {{ formatMoney(selectedTransaction?.amount, selectedTransaction?.currency) }}</p>
+        <label>Motif {{ approvalDecision === 'reject' ? '*' : '(facultatif)' }}
+          <textarea name="decisionReason" [(ngModel)]="decisionReason" maxlength="500" rows="3" [required]="approvalDecision === 'reject'"></textarea>
+        </label>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || (approvalDecision === 'reject' && !decisionReason.trim())">{{ saving ? 'Traitement…' : (approvalDecision === 'approve' ? 'Approuver' : 'Rejeter') }}</button></div>
+      </form>
+      <form *ngIf="modal === 'pending-payment'" class="finance-form" (ngSubmit)="savePaymentDecision()">
+        <p class="finance-form-hint">{{ selectedPayment?.transaction_description }} · {{ formatMoney(selectedPayment?.amount, selectedPayment?.currency) }} · {{ selectedPayment?.account_name }}</p>
+        <label *ngIf="!paymentDecisionConfirmed">Motif du rejet *
+          <textarea name="paymentDecisionReason" [(ngModel)]="decisionReason" maxlength="500" rows="3" required></textarea>
+        </label>
+        <p class="finance-form-hint" *ngIf="paymentDecisionConfirmed">La confirmation inscrira le mouvement dans le compte et recalculera le solde.</p>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || (!paymentDecisionConfirmed && !decisionReason.trim())">{{ saving ? 'Traitement…' : (paymentDecisionConfirmed ? 'Confirmer l’exécution' : 'Rejeter le paiement') }}</button></div>
+      </form>
+      <form *ngIf="modal === 'budget' || modal === 'revision'" class="finance-form" (ngSubmit)="saveBudget()">
+        <label>Période *
+          <select name="budgetPeriod" [(ngModel)]="budgetForm.period_id" required [disabled]="modal === 'revision'">
+            <option *ngFor="let period of periods" [value]="period.id" [disabled]="period.status !== 'OPEN'">{{ period.name }}</option>
+          </select>
+        </label>
+        <label>Catégorie de dépense *
+          <select name="budgetCategory" [(ngModel)]="budgetForm.category_id" required [disabled]="modal === 'revision'">
+            <option *ngFor="let category of expenseCategories" [value]="category.id">{{ category.name }}</option>
+          </select>
+        </label>
+        <label>Nom du budget *<input name="budgetName" [(ngModel)]="budgetForm.name" maxlength="160" required [readonly]="modal === 'revision'" /></label>
+        <label>Montant alloué *<input name="budgetAmount" [(ngModel)]="budgetForm.allocated_amount" type="number" min="0.01" step="0.01" required /></label>
+        <label>Devise *<input name="budgetCurrency" [(ngModel)]="budgetForm.currency" minlength="3" maxlength="3" pattern="[A-Za-z]{3}" required [readonly]="modal === 'revision'" /></label>
+        <label *ngIf="modal === 'revision'">Motif obligatoire *
+          <textarea name="budgetReason" [(ngModel)]="budgetForm.reason" maxlength="500" rows="3" required></textarea>
+        </label>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || !budgetForm.allocated_amount || (modal === 'revision' && !budgetForm.reason.trim())">{{ saving ? 'Enregistrement…' : (modal === 'revision' ? 'Enregistrer la révision' : 'Créer le budget') }}</button></div>
+      </form>
+      <form *ngIf="modal === 'account'" class="finance-form" (ngSubmit)="saveAccount()">
+        <label>Nom du compte *<input name="accountName" [(ngModel)]="accountForm.name" maxlength="120" required /></label>
+        <label>Type de compte *
+          <select name="accountKind" [(ngModel)]="accountForm.kind" required><option value="CASH">Caisse espèces</option><option value="BANK">Compte bancaire</option><option value="MOBILE_MONEY">Mobile Money</option><option value="OTHER">Autre</option></select>
+        </label>
+        <label>Devise *<input name="accountCurrency" [(ngModel)]="accountForm.currency" minlength="3" maxlength="3" pattern="[A-Za-z]{3}" required /></label>
+        <label>Solde d’ouverture<input name="accountOpening" [(ngModel)]="accountForm.opening_balance" type="number" min="0" step="0.01" required /></label>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || !accountForm.name.trim()">{{ saving ? 'Enregistrement…' : 'Créer le compte' }}</button></div>
+      </form>
+      <form *ngIf="modal === 'fund'" class="finance-form" (ngSubmit)="saveFund()">
+        <label>Nom du fonds *<input name="fundName" [(ngModel)]="fundForm.name" maxlength="120" required /></label>
+        <label>Finalité<textarea name="fundPurpose" [(ngModel)]="fundForm.purpose" maxlength="500" rows="3"></textarea></label>
+        <label class="finance-checkbox"><input name="fundRestricted" type="checkbox" [(ngModel)]="fundForm.is_restricted" /> Fonds affecté à une finalité</label>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || !fundForm.name.trim()">{{ saving ? 'Enregistrement…' : 'Créer le fonds' }}</button></div>
+      </form>
+      <form *ngIf="modal === 'period-action'" class="finance-form" (ngSubmit)="savePeriodAction()">
+        <p class="finance-form-hint">{{ selectedPeriod?.name }} · {{ formatPeriod(selectedPeriod!) }}</p>
+        <label>Motif {{ periodAction === 'reopen' ? 'obligatoire' : '(facultatif)' }}
+          <textarea name="periodActionReason" [(ngModel)]="decisionReason" maxlength="500" rows="3" [required]="periodAction === 'reopen'"></textarea>
+        </label>
+        <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || (periodAction === 'reopen' && !decisionReason.trim())">{{ saving ? 'Traitement…' : (periodAction === 'close' ? 'Clôturer' : 'Réouvrir') }}</button></div>
+      </form>
+    </section>
+  </div>
+</main>

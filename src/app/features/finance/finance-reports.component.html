@@ -1,0 +1,124 @@
+<main class="finance-page finance-report-page">
+  <nav class="finance-breadcrumbs finance-no-print" aria-label="Fil d’Ariane">
+    <a routerLink="/finance">Finances</a><span>›</span><strong>Rapports</strong>
+  </nav>
+
+  <header class="finance-heading finance-no-print">
+    <div class="finance-heading-title">
+      <span class="finance-title-icon" aria-hidden="true">▤</span>
+      <div><h1>Rapports financiers</h1><p>Consultez et imprimez les états financiers de l’église.</p></div>
+    </div>
+    <div class="finance-heading-filters">
+      <label class="finance-church-select" *ngIf="churches.length > 1">
+        <span class="visually-hidden">Église</span>
+        <select [(ngModel)]="selectedChurchId" (ngModelChange)="onChurchChange()">
+          <option *ngFor="let church of churches" [value]="church.church_id">{{ church.name }}</option>
+        </select>
+      </label>
+      <span class="finance-church-chip" *ngIf="churches.length === 1">{{ churches[0].name }}</span>
+      <a class="finance-secondary-button" routerLink="/finance/cash-journal">Journal de caisse</a>
+    </div>
+  </header>
+
+  <p class="finance-feedback error finance-no-print" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
+  <p class="finance-feedback finance-no-print" *ngIf="loading || reportLoading" role="status">Préparation du rapport…</p>
+
+  <section class="finance-panel finance-report-filters finance-no-print">
+    <label>Du <input type="date" [(ngModel)]="startDate" /></label>
+    <label>Au <input type="date" [(ngModel)]="endDate" /></label>
+    <label>Période financière
+      <select [(ngModel)]="selectedPeriodId">
+        <option value="">Toutes les périodes</option>
+        <option *ngFor="let period of periods" [value]="period.id">{{ period.name }}</option>
+      </select>
+    </label>
+    <button type="button" class="finance-primary-button" [disabled]="reportLoading" (click)="loadReport()">Afficher</button>
+    <button type="button" class="finance-secondary-button" [disabled]="!report" (click)="printReport()">Imprimer le rapport</button>
+  </section>
+
+  <nav class="finance-report-tabs finance-no-print" aria-label="Types de rapports">
+    <button type="button" [class.active]="selectedReport === 'summary'" (click)="selectedReport = 'summary'">Synthèse</button>
+    <button type="button" [class.active]="selectedReport === 'income'" (click)="selectedReport = 'income'">Recettes</button>
+    <button type="button" [class.active]="selectedReport === 'expenses'" (click)="selectedReport = 'expenses'">Dépenses</button>
+    <button type="button" [class.active]="selectedReport === 'budgets'" (click)="selectedReport = 'budgets'">Budgets</button>
+    <button type="button" [class.active]="selectedReport === 'accounts'" (click)="selectedReport = 'accounts'">Caisses et comptes</button>
+  </nav>
+
+  <article class="finance-panel finance-print-sheet" *ngIf="report as data">
+    <header class="finance-report-title">
+      <div>
+        <p class="finance-report-eyebrow">CHURCHOS · RAPPORT FINANCIER</p>
+        <h2>{{ reportTitle(selectedReport) }}</h2>
+        <p>{{ data.church_name }} · Du {{ data.start_date | date:'dd/MM/yyyy' }} au {{ data.end_date | date:'dd/MM/yyyy' }}</p>
+      </div>
+      <small>Édité le {{ data.generated_at | date:'dd/MM/yyyy HH:mm' }}</small>
+    </header>
+
+    <ng-container [ngSwitch]="selectedReport">
+      <section *ngSwitchCase="'summary'">
+        <div class="finance-report-kpis">
+          <div><span>Recettes encaissées</span><strong>{{ formatMoney(data.income_total, data.currency) }}</strong></div>
+          <div><span>Dépenses payées</span><strong>{{ formatMoney(data.expense_total, data.currency) }}</strong></div>
+          <div><span>Solde net de la période</span><strong>{{ formatMoney(data.net_total, data.currency) }}</strong></div>
+        </div>
+        <div class="finance-report-columns">
+          <section><h3>Recettes par catégorie</h3>
+            <table><thead><tr><th>Catégorie</th><th class="numeric">Montant</th></tr></thead>
+              <tbody><tr *ngFor="let row of data.income_by_category"><td>{{ row.category_name }}</td><td class="numeric">{{ formatMoney(row.amount, data.currency) }}</td></tr>
+                <tr *ngIf="!data.income_by_category.length"><td colspan="2">Aucune recette encaissée sur la période.</td></tr></tbody>
+            </table>
+          </section>
+          <section><h3>Dépenses par catégorie</h3>
+            <table><thead><tr><th>Catégorie</th><th class="numeric">Montant</th></tr></thead>
+              <tbody><tr *ngFor="let row of data.expenses_by_category"><td>{{ row.category_name }}</td><td class="numeric">{{ formatMoney(row.amount, data.currency) }}</td></tr>
+                <tr *ngIf="!data.expenses_by_category.length"><td colspan="2">Aucune dépense payée sur la période.</td></tr></tbody>
+            </table>
+          </section>
+        </div>
+      </section>
+
+      <section *ngSwitchCase="'income'">
+        <div class="finance-report-kpis"><div><span>Total des recettes encaissées</span><strong>{{ formatMoney(data.income_total, data.currency) }}</strong></div></div>
+        <h3>Recettes par catégorie</h3>
+        <table><thead><tr><th>Catégorie</th><th class="numeric">Montant encaissé</th></tr></thead>
+          <tbody><tr *ngFor="let row of data.income_by_category"><td>{{ row.category_name }}</td><td class="numeric">{{ formatMoney(row.amount, data.currency) }}</td></tr>
+            <tr *ngIf="!data.income_by_category.length"><td colspan="2">Aucune recette encaissée sur la période.</td></tr></tbody>
+          <tfoot><tr><th>Total recettes</th><th class="numeric">{{ formatMoney(data.income_total, data.currency) }}</th></tr></tfoot>
+        </table>
+      </section>
+
+      <section *ngSwitchCase="'expenses'">
+        <div class="finance-report-kpis"><div><span>Total des dépenses payées</span><strong>{{ formatMoney(data.expense_total, data.currency) }}</strong></div></div>
+        <h3>Dépenses par catégorie</h3>
+        <table><thead><tr><th>Catégorie</th><th class="numeric">Montant payé</th></tr></thead>
+          <tbody><tr *ngFor="let row of data.expenses_by_category"><td>{{ row.category_name }}</td><td class="numeric">{{ formatMoney(row.amount, data.currency) }}</td></tr>
+            <tr *ngIf="!data.expenses_by_category.length"><td colspan="2">Aucune dépense payée sur la période.</td></tr></tbody>
+          <tfoot><tr><th>Total dépenses</th><th class="numeric">{{ formatMoney(data.expense_total, data.currency) }}</th></tr></tfoot>
+        </table>
+      </section>
+
+      <section *ngSwitchCase="'budgets'">
+        <h3>État des budgets concernés</h3>
+        <table><thead><tr><th>Budget / catégorie</th><th>Période</th><th class="numeric">Alloué</th><th class="numeric">Engagé</th><th class="numeric">Payé</th><th class="numeric">Disponible</th></tr></thead>
+          <tbody><tr *ngFor="let budget of data.budgets">
+            <td>{{ budget.name }}<small class="finance-table-subtitle">{{ budget.category_name }}<span *ngIf="budget.campus_name"> · {{ budget.campus_name }}</span></small></td>
+            <td>{{ budget.period_name }}</td><td class="numeric">{{ formatMoney(budget.allocated_amount, budget.currency) }}</td>
+            <td class="numeric">{{ formatMoney(budget.committed_amount, budget.currency) }}</td><td class="numeric">{{ formatMoney(budget.paid_amount, budget.currency) }}</td>
+            <td class="numeric">{{ formatMoney(budget.available_amount, budget.currency) }}</td>
+          </tr><tr *ngIf="!data.budgets.length"><td colspan="6">Aucun budget pour les filtres choisis.</td></tr></tbody>
+        </table>
+      </section>
+
+      <section *ngSwitchCase="'accounts'">
+        <h3>Soldes actuels des caisses et comptes</h3>
+        <table><thead><tr><th>Compte</th><th>Type</th><th class="numeric">Solde initial</th><th class="numeric">Solde actuel</th></tr></thead>
+          <tbody><tr *ngFor="let account of data.accounts"><td>{{ account.name }}</td><td>{{ account.kind }}</td>
+            <td class="numeric">{{ formatMoney(account.opening_balance, account.currency) }}</td><td class="numeric">{{ formatMoney(account.current_balance, account.currency) }}</td>
+          </tr><tr *ngIf="!data.accounts.length"><td colspan="4">Aucune caisse ou aucun compte actif.</td></tr></tbody>
+        </table>
+        <p class="finance-report-note">Les soldes des comptes sont ceux au moment de l’édition et peuvent être libellés en devises différentes.</p>
+      </section>
+    </ng-container>
+    <footer class="finance-report-footer">Document généré par ChurchOS · {{ data.church_name }}</footer>
+  </article>
+</main>

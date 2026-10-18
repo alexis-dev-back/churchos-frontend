@@ -1,0 +1,34 @@
+<section class="dashboard-page">
+  <header class="dashboard-heading">
+    <div><p class="eyebrow">VUE D’ENSEMBLE</p><h1>Tableau de bord</h1><p>Un aperçu des données disponibles dans votre espace.</p></div>
+    <a routerLink="/admin/churches">Gérer les églises</a>
+  </header>
+
+  <p *ngIf="errorMessage" class="message error" role="alert">{{ errorMessage }}</p>
+  <p *ngIf="loading" class="message">Chargement des données du tenant…</p>
+
+  <ng-container *ngIf="overview as data">
+    <div class="stats-grid">
+      <article class="stat-card members"><span class="stat-icon">M</span><div><span class="stat-label">Membres</span><strong class="stat-value">{{ data.members.length }}</strong><span class="stat-meta">Profils rattachés</span></div></article>
+      <article class="stat-card people"><span class="stat-icon">P</span><div><span class="stat-label">Personnes</span><strong class="stat-value">{{ data.people.length }}</strong><span class="stat-meta">Fiches de personnes</span></div></article>
+      <article class="stat-card families"><span class="stat-icon">F</span><div><span class="stat-label">Familles</span><strong class="stat-value">{{ data.families.length }}</strong><span class="stat-meta">Foyers enregistrés</span></div></article>
+      <article class="stat-card sites"><span class="stat-icon">É</span><div><span class="stat-label">Églises</span><strong class="stat-value">{{ data.churches.length }}</strong><span class="stat-meta">{{ data.campuses.length }} campus</span></div></article>
+    </div>
+
+    <div class="overview-grid">
+      <section class="panel">
+        <header class="panel-heading"><div><h2>Membres récents</h2><p>Les cinq derniers profils renvoyés par l’API.</p></div><a routerLink="/members">Tous les membres</a></header>
+        <div class="member-row" *ngFor="let member of data.members.slice(0, 5)"><span class="avatar">{{ member.first_name.slice(0, 1) }}{{ member.last_name.slice(0, 1) }}</span><div><strong>{{ member.first_name }} {{ member.last_name }}</strong><small>{{ member.email }}</small></div><span class="status" [attr.data-status]="member.status">{{ member.status || 'Inconnu' }}</span></div>
+        <p class="empty" *ngIf="!data.members.length">Aucun membre n’est encore enregistré.</p>
+      </section>
+
+      <section class="panel directory-panel">
+        <header class="panel-heading"><div><h2>Répertoires</h2><p>Accès direct aux opérations disponibles.</p></div></header>
+        <a routerLink="/people"><span class="shortcut-mark">P</span><span><strong>Personnes</strong><small>Créer, modifier ou convertir en membre</small></span><span class="arrow">›</span></a>
+        <a routerLink="/families"><span class="shortcut-mark">F</span><span><strong>Familles</strong><small>Gérer les foyers et leurs liens</small></span><span class="arrow">›</span></a>
+        <a routerLink="/members"><span class="shortcut-mark">M</span><span><strong>Membres</strong><small>Profils, statut et invitations</small></span><span class="arrow">›</span></a>
+        <a routerLink="/admin/churches"><span class="shortcut-mark">É</span><span><strong>Sites</strong><small>Églises et campus du tenant</small></span><span class="arrow">›</span></a>
+      </section>
+    </div>
+  </ng-container>
+</section>

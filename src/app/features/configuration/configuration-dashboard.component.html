@@ -1,0 +1,227 @@
+<section class="page configuration-admin">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">ADMINISTRATION DE L’ORGANISATION</p>
+      <h1>Configuration & administration</h1>
+      <p>Gérez les paramètres, les accès et les rôles de votre organisation.</p>
+    </div>
+    <span class="tenant-badge">Espace sécurisé</span>
+  </header>
+
+  <p class="feedback error" role="alert" *ngIf="errorMessage">{{ errorMessage }}</p>
+  <p class="feedback success" role="status" *ngIf="successMessage">{{ successMessage }}</p>
+
+  <nav class="tabs" aria-label="Sections de configuration">
+    <button type="button" [class.selected]="tab === 'church'" (click)="setTab('church')">Église</button>
+    <button type="button" [class.selected]="tab === 'users'" (click)="setTab('users')">Utilisateurs <span>{{ users.length }}</span></button>
+    <button type="button" [class.selected]="tab === 'roles'" (click)="setTab('roles')">Rôles & permissions <span>{{ roles.length }}</span></button>
+    <button type="button" [class.selected]="tab === 'assignments'" (click)="setTab('assignments')">Attributions</button>
+    <button type="button" [class.selected]="tab === 'audit'" (click)="setTab('audit')">Journal d’audit</button>
+  </nav>
+
+  <div class="loading" *ngIf="loading">Chargement de l’administration…</div>
+
+  <ng-container *ngIf="!loading">
+    <section class="panel" *ngIf="tab === 'church'">
+      <div class="section-heading">
+        <div><h2>Paramètres de l’église</h2><p>Informations générales et coordonnées utilisées dans l’espace de l’église.</p></div>
+        <label class="church-picker" *ngIf="churches.length > 1">Église
+          <select [(ngModel)]="selectedChurchId" (ngModelChange)="onChurchChange()">
+            <option *ngFor="let church of churches" [value]="church.church_id">{{ church.name }}</option>
+          </select>
+        </label>
+      </div>
+      <div class="empty" *ngIf="!churches.length">Aucune église active n’est rattachée à cette organisation.</div>
+      <form class="settings-form" *ngIf="churchSettings as settings" (ngSubmit)="saveChurchSettings()">
+        <label>Nom de l’église<input [value]="settings.church_name" disabled /></label>
+        <label>Nom court<input name="short_name" [(ngModel)]="settings.short_name" maxlength="120" /></label>
+        <label>Dénomination<input name="denomination" [(ngModel)]="settings.denomination" maxlength="160" /></label>
+        <label>Nom du pasteur<input [value]="settings.pastor_name || ''" disabled /></label>
+        <label>Téléphone<input name="phone" [(ngModel)]="settings.phone" type="tel" /></label>
+        <label>Courriel<input name="email" [(ngModel)]="settings.email" type="email" /></label>
+        <label>Adresse<input name="address" [(ngModel)]="settings.address" /></label>
+        <label>Ville<input name="city" [(ngModel)]="settings.city" /></label>
+        <label>Région<input name="region" [(ngModel)]="settings.region" /></label>
+        <label>Pays<input name="country" [(ngModel)]="settings.country" /></label>
+        <label>Site web<input name="website" [(ngModel)]="settings.website" type="url" /></label>
+        <label>Langue<input name="language" [(ngModel)]="settings.language" maxlength="10" /></label>
+        <label>Fuseau horaire<input name="timezone" [(ngModel)]="settings.timezone" placeholder="Africa/Abidjan" /></label>
+        <label>Devise de base<input [value]="settings.currency || 'Non configurée'" disabled /></label>
+        <label>Numéro d’enregistrement<input name="registration_number" [(ngModel)]="settings.registration_number" /></label>
+        <div class="logo-field">
+          <span>Logo principal</span><img *ngIf="settings.logo_primary" [src]="settings.logo_primary" alt="Logo principal de l’église" />
+          <input type="file" accept="image/png,image/jpeg,image/webp" (change)="selectLogo('logo_primary', $event)" />
+          <small *ngIf="selectedLogoPrimary">{{ selectedLogoPrimary.name }}</small>
+          <div><button type="button" class="secondary" [disabled]="saving || !selectedLogoPrimary" (click)="uploadLogo('logo_primary')">Enregistrer le logo</button><button type="button" class="danger" *ngIf="settings.logo_primary" [disabled]="saving" (click)="removeLogo('logo_primary')">Retirer</button></div>
+        </div>
+        <div class="logo-field">
+          <span>Logo secondaire</span><img *ngIf="settings.logo_secondary" [src]="settings.logo_secondary" alt="Logo secondaire de l’église" />
+          <input type="file" accept="image/png,image/jpeg,image/webp" (change)="selectLogo('logo_secondary', $event)" />
+          <small *ngIf="selectedLogoSecondary">{{ selectedLogoSecondary.name }}</small>
+          <div><button type="button" class="secondary" [disabled]="saving || !selectedLogoSecondary" (click)="uploadLogo('logo_secondary')">Enregistrer le logo</button><button type="button" class="danger" *ngIf="settings.logo_secondary" [disabled]="saving" (click)="removeLogo('logo_secondary')">Retirer</button></div>
+        </div>
+        <label class="full-width">Motto<textarea name="motto" [(ngModel)]="settings.motto" rows="2"></textarea></label>
+        <label class="full-width">Description<textarea name="description" [(ngModel)]="settings.description" rows="3"></textarea></label>
+        <label class="full-width">Liens sociaux (objet JSON)<textarea name="socialLinksJson" [(ngModel)]="socialLinksJson" rows="3" spellcheck="false"></textarea></label>
+        <label class="full-width">Informations complémentaires (objet JSON)<textarea name="additionalInformationJson" [(ngModel)]="additionalInformationJson" rows="3" spellcheck="false"></textarea></label>
+        <div class="form-actions full-width"><button class="primary" type="submit" [disabled]="saving || !selectedChurchId">{{ saving ? 'Enregistrement…' : 'Enregistrer les paramètres' }}</button></div>
+      </form>
+    </section>
+
+    <section class="panel" *ngIf="tab === 'users'">
+      <div class="section-heading">
+        <div><h2>Utilisateurs de l’organisation</h2><p>Les suspensions concernent uniquement cette organisation.</p></div>
+        <form class="inline-form" (ngSubmit)="search()">
+          <input aria-label="Rechercher un utilisateur" name="searchUsers" [(ngModel)]="searchUsers" placeholder="Nom, courriel ou identifiant" />
+          <button type="submit" class="secondary">Rechercher</button>
+        </form>
+      </div>
+      <form class="add-user-form" (ngSubmit)="addUser()">
+        <label>Ajouter un compte existant <input name="newUsername" [(ngModel)]="newUsername" placeholder="Identifiant exact de l’utilisateur" /></label>
+        <button class="primary" type="submit" [disabled]="saving || !newUsername.trim()">Ajouter à l’organisation</button>
+      </form>
+      <p class="hint">Le compte doit déjà exister sur ChurchOS. Cette action ne crée pas de mot de passe ni de compte global.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Utilisateur</th><th>Rôle système</th><th>Statut de l’organisation</th><th>Compte global</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let user of users">
+              <td><strong>{{ user.first_name || user.last_name ? (user.first_name + ' ' + user.last_name).trim() : user.username }}</strong><small>{{ user.email || user.username }}</small></td>
+              <td><span class="role-badge">{{ user.role }}</span></td>
+              <td><span class="status" [class.inactive]="!user.is_active">{{ user.is_active ? 'Actif' : 'Suspendu' }}</span></td>
+              <td>{{ user.account_is_active ? 'Actif' : 'Désactivé' }}</td>
+              <td class="actions"><button type="button" class="quiet" [disabled]="!user.account_is_active" (click)="toggleMembership(user)">{{ user.is_active ? 'Suspendre' : 'Réactiver' }}</button></td>
+            </tr>
+            <tr *ngIf="!users.length"><td colspan="5" class="empty">Aucun utilisateur trouvé.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" *ngIf="tab === 'roles'">
+      <div class="section-heading">
+        <div><h2>Rôles personnalisés</h2><p>Composez les accès selon les modules et opérations autorisés.</p></div>
+        <button type="button" class="primary" (click)="openCreateRole()">Créer un rôle</button>
+      </div>
+      <div class="role-grid">
+        <article class="role-card" *ngFor="let role of roles">
+          <div class="role-title">
+            <div><h3>{{ role.name }}</h3><code>{{ role.code }}</code></div>
+            <span class="status" [class.inactive]="!role.is_active">{{ role.is_active ? 'Actif' : 'Inactif' }}</span>
+          </div>
+          <p>{{ role.description || 'Aucune description.' }}</p>
+          <div class="role-meta"><span>{{ role.permission_codes.length }} permission(s)</span><span>{{ role.assigned_users }} attribution(s)</span><span *ngIf="role.is_system">Rôle système</span></div>
+          <div class="role-actions" *ngIf="!role.is_system">
+            <button type="button" class="secondary" (click)="openEditRole(role)">Modifier</button>
+            <button type="button" class="quiet" (click)="toggleRole(role)">{{ role.is_active ? 'Désactiver' : 'Activer' }}</button>
+          </div>
+        </article>
+        <div class="empty" *ngIf="!roles.length">Aucun rôle disponible.</div>
+      </div>
+    </section>
+
+    <section class="panel" *ngIf="tab === 'assignments'">
+      <div class="section-heading"><div><h2>Attribution des rôles</h2><p>Accordez des accès avec une portée et une durée contrôlées.</p></div></div>
+      <form class="assignment-form" (ngSubmit)="assignRole()">
+        <label>Utilisateur
+          <select name="assignmentUser" [(ngModel)]="assignmentForm.membership_id" (ngModelChange)="selectAssignmentUser($event)" required>
+            <option [ngValue]="null">Choisir un utilisateur actif</option>
+            <option *ngFor="let user of users" [ngValue]="user.membership_id" [disabled]="!user.is_active">{{ user.username }} · {{ user.email }}</option>
+          </select>
+        </label>
+        <label>Rôle
+          <select name="assignmentRole" [(ngModel)]="assignmentForm.role_id" required>
+            <option value="">Choisir un rôle actif</option>
+            <option *ngFor="let role of roles" [value]="role.id" [disabled]="!role.is_active || role.is_system">{{ role.name }}</option>
+          </select>
+        </label>
+        <label>Périmètre
+          <select name="assignmentScope" [(ngModel)]="assignmentForm.scope" (ngModelChange)="changeAssignmentScope()">
+            <option value="ORGANIZATION">Toute l’organisation</option><option value="CHURCH">Une église</option><option value="CAMPUS">Un campus</option>
+          </select>
+        </label>
+        <label *ngIf="assignmentForm.scope !== 'ORGANIZATION'">Église
+          <select name="assignmentChurch" [(ngModel)]="assignmentForm.church_id" (ngModelChange)="assignmentForm.campus_id = ''" required>
+            <option value="">Choisir une église</option><option *ngFor="let church of churches" [value]="church.church_id">{{ church.name }}</option>
+          </select>
+        </label>
+        <label *ngIf="assignmentForm.scope === 'CAMPUS'">Campus
+          <select name="assignmentCampus" [(ngModel)]="assignmentForm.campus_id" required>
+            <option value="">Choisir un campus</option><option *ngFor="let campus of campuses" [value]="campus.campus_id">{{ campus.name }}</option>
+          </select>
+        </label>
+        <label>Expire le (facultatif)<input type="date" name="expiresOn" [(ngModel)]="assignmentForm.expires_on" /></label>
+        <div class="form-actions"><button class="primary" type="submit" [disabled]="saving || !assignmentForm.membership_id || !assignmentForm.role_id">{{ saving ? 'Attribution…' : 'Attribuer le rôle' }}</button></div>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Périmètre</th><th>Début / expiration</th><th>Statut</th><th></th></tr></thead>
+          <tbody>
+            <tr *ngFor="let assignment of assignments">
+              <td><strong>{{ assignment.username }}</strong><small>{{ assignment.email }}</small></td>
+              <td>{{ assignment.role_name }}</td><td>{{ scopeLabel(assignment) }}</td>
+              <td>{{ assignment.starts_at | date:'mediumDate' }}<small *ngIf="assignment.expires_at">Expire {{ assignment.expires_at | date:'mediumDate' }}</small></td>
+              <td><span class="status" [class.inactive]="assignment.revoked_at">{{ assignment.revoked_at ? 'Révoqué' : 'Actif' }}</span></td>
+              <td><button type="button" class="danger" *ngIf="!assignment.revoked_at" (click)="revokeAssignment(assignment)">Révoquer</button></td>
+            </tr>
+            <tr *ngIf="!assignments.length"><td colspan="6" class="empty">Aucune attribution de rôle personnalisée.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="panel" *ngIf="tab === 'audit'">
+      <div class="section-heading"><div><h2>Journal d’audit</h2><p>Historique immuable des modifications effectuées dans l’administration.</p></div></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Acteur</th><th>Action</th><th>Objet</th><th>Périmètre</th><th>Résultat</th></tr></thead>
+          <tbody>
+            <tr *ngFor="let entry of auditLogs">
+              <td>{{ entry.created_at | date:'medium' }}</td><td>{{ entry.actor || 'Système' }}</td><td><code>{{ entry.action }}</code></td>
+              <td>{{ entry.object_type }}<small>{{ entry.object_id }}</small></td><td>{{ entry.scope || 'Organisation' }}</td>
+              <td><span class="status">{{ entry.result }}</span></td>
+            </tr>
+            <tr *ngIf="!auditLogs.length"><td colspan="6" class="empty">Aucune activité enregistrée.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </ng-container>
+
+  <div class="modal-backdrop" *ngIf="roleModalOpen" (click)="roleModalOpen = false">
+    <section class="role-modal" role="dialog" aria-modal="true" aria-labelledby="role-modal-title" (click)="$event.stopPropagation()">
+      <header class="modal-heading">
+        <div><p class="eyebrow">ÉTAPE {{ roleStep }} SUR 3</p><h2 id="role-modal-title">{{ editingRole ? 'Modifier le rôle' : 'Créer un rôle personnalisé' }}</h2></div>
+        <button type="button" class="quiet" aria-label="Fermer" (click)="roleModalOpen = false">×</button>
+      </header>
+      <div class="step-indicator"><span [class.current]="roleStep >= 1">1 · Informations</span><span [class.current]="roleStep >= 2">2 · Permissions</span><span [class.current]="roleStep >= 3">3 · Vérification</span></div>
+      <div *ngIf="roleStep === 1" class="role-basics">
+        <label>Nom du rôle *<input [(ngModel)]="roleForm.name" (ngModelChange)="generateRoleCode()" placeholder="Ex. Responsable des finances" /></label>
+        <label>Code unique *<input [(ngModel)]="roleForm.code" placeholder="responsable-finances" /></label>
+        <label>Description<textarea [(ngModel)]="roleForm.description" rows="3"></textarea></label>
+        <label class="check-line"><input type="checkbox" [(ngModel)]="roleForm.is_active" /> Rôle actif</label>
+      </div>
+      <div *ngIf="roleStep === 2" class="permission-list">
+        <section class="permission-module" *ngFor="let module of permissionModules">
+          <header><h3>{{ moduleLabel(module.name) }}</h3><button type="button" class="quiet" (click)="toggleModulePermissions(module, !areModulePermissionsSelected(module))">{{ areModulePermissionsSelected(module) ? 'Tout retirer' : 'Tout sélectionner' }}</button></header>
+          <label *ngFor="let permission of module.permissions; trackBy: trackPermission" class="permission-row">
+            <input type="checkbox" [checked]="selectedPermissionCodes.includes(permission.code)" (change)="togglePermission(permission.code, $any($event.target).checked)" />
+            <span><strong>{{ permission.label }}</strong><small>{{ permission.description || permission.code }}</small></span><code>{{ permission.action }}</code>
+          </label>
+        </section>
+      </div>
+      <div *ngIf="roleStep === 3" class="role-review">
+        <h3>{{ roleForm.name }}</h3><code>{{ roleForm.code }}</code><p>{{ roleForm.description || 'Aucune description' }}</p>
+        <div class="review-summary"><strong>{{ selectedPermissionCodes.length }} permission(s)</strong><span>Portée configurable au moment de l’attribution du rôle.</span></div>
+        <ul><li *ngFor="let label of selectedRolePermissionLabels">{{ label }}</li></ul>
+        <p *ngIf="!selectedPermissionCodes.length" class="hint">Ce rôle ne donnera accès à aucun module tant qu’aucune permission ne lui sera attribuée.</p>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" class="quiet" (click)="roleModalOpen = false">Annuler</button>
+        <button type="button" class="secondary" *ngIf="roleStep > 1" (click)="roleStep = roleStep - 1">Précédent</button>
+        <button type="button" class="primary" *ngIf="roleStep < 3" [disabled]="roleStep === 1 && (!roleForm.name.trim() || !roleForm.code.trim())" (click)="roleStep = roleStep + 1">Continuer</button>
+        <button type="button" class="primary" *ngIf="roleStep === 3" [disabled]="saving" (click)="saveRole()">{{ saving ? 'Enregistrement…' : 'Confirmer et enregistrer' }}</button>
+      </footer>
+    </section>
+  </div>
+</section>

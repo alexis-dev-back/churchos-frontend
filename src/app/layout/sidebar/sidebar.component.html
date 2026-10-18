@@ -1,0 +1,41 @@
+<button *ngIf="open" type="button" class="sidebar-backdrop" aria-label="Fermer le menu" (click)="closeSidebar.emit()"></button>
+<aside class="sidebar" [class.open]="open">
+  <div class="brand-block">
+    <div class="brand-mark">+</div>
+    <div class="brand-text">
+      <div class="brand-name">ChurchOS</div>
+      <div class="brand-subtitle">Ensemble pour sa mission</div>
+    </div>
+  </div>
+
+  <nav class="main-nav" aria-label="Navigation principale">
+    <ng-container *ngFor="let item of visibleNavItems; let i = index">
+      <div class="section-title nav-section-title" *ngIf="isSectionStart(i)">{{ item.section }}</div>
+      <a [routerLink]="item.path" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: item.path === '/dashboard' }" class="nav-item" [attr.aria-label]="item.label" (click)="closeSidebar.emit()">
+        <span class="nav-icon">{{ item.icon }}</span><span>{{ item.label }}</span>
+      </a>
+    </ng-container>
+  </nav>
+
+  <div class="admin-section" *ngIf="showSuperAdminLink">
+    <div class="section-title">Plateforme</div>
+    <nav class="admin-nav" aria-label="Superadministration">
+      <a routerLink="/admin" routerLinkActive="active" class="nav-item admin-item" (click)="closeSidebar.emit()"><span class="nav-icon">S</span><span>Superadministration</span></a>
+    </nav>
+  </div>
+
+  <div class="admin-section" *ngIf="showAdminItems">
+    <div class="section-title">Organisation</div>
+    <nav class="admin-nav" aria-label="Administration">
+      <a *ngFor="let item of adminItems" [routerLink]="item.path" routerLinkActive="active" class="nav-item admin-item" (click)="closeSidebar.emit()">
+        <span class="nav-icon">{{ item.icon }}</span>
+        <span>{{ item.label }}</span>
+      </a>
+    </nav>
+  </div>
+
+  <div class="sidebar-banner" aria-label="Message d'encouragement">
+    <div class="banner-overlay"></div>
+    <p>Une église bien organisée est une église plus forte !</p>
+  </div>
+</aside>
