@@ -101,12 +101,14 @@ export class SidebarComponent implements OnInit {
     { section: 'Annuaire', label: 'Familles', path: '/families', icon: 'F', permissionModule: 'families' },
     { section: 'Annuaire', label: 'Événements', path: '/events', icon: 'É', permissionModule: 'events' },
     { section: 'Annuaire', label: 'Présence et assiduité', path: '/attendance', icon: '✓', permissionModule: 'attendance' },
+    { section: 'Accompagnement', label: 'Suivi pastoral', path: '/pastoral', icon: 'S', permissionModule: 'pastoral' },
     { section: 'Finances', label: 'Finances', path: '/finance', icon: '$', permissionModule: 'finance' },
     { section: 'Finances', label: 'Rapports', path: '/finance/reports', icon: '▤', permissionModule: 'finance', reportOnly: true },
     { section: 'Finances', label: 'Journal de caisse', path: '/finance/cash-journal', icon: '↔', permissionModule: 'finance', reportOnly: true },
     { section: 'Formation', label: 'ECODIM', path: '/ecodim', icon: 'E', permissionModule: 'ecodim' },
     { section: 'Annuaire', label: 'Ministères', path: '/ministries', icon: 'Mi', permissionModule: 'ministries' },
     { section: 'Annuaire', label: 'Tribus', path: '/tribes', icon: 'T', permissionModule: 'ministries' },
+    { section: 'Mon espace', label: 'Mes tâches', path: '/tasks', icon: '✓', alwaysVisible: true },
     { section: 'Mon espace', label: 'Mon profil', path: '/profile', icon: 'U', alwaysVisible: true },
   ];
 

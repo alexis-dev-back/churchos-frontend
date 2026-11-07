@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, OnDestroy, OnInit, ViewChild } from '@angular/core';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import * as QRCode from 'qrcode';
 import { Church, Campus } from '../../core/models/tenant';
@@ -87,7 +87,51 @@ interface EventCalendarCell {
           </form>
         </section>
         <p class="empty" *ngIf="loading">Chargement des événements…</p>
-        <section class="cards" *ngIf="!loading && !calendarView"><article class="card" *ngFor="let event of events"><div class="card-head"><div><h2>{{ event.title }}</h2><small>{{ event.scope === 'CAMPUS' ? event.campus_name : event.church_name || 'Organisation' }} · {{ event.category || 'Sans catégorie' }}</small></div><span class="status" [attr.data-status]="event.status">{{ statusLabel(event.status) }}</span></div><p>{{ event.description || 'Aucune description.' }}</p><small>{{ event.occurrences.length ? (event.occurrences[0].starts_at | date:'dd/MM/yyyy HH:mm':event.timezone) : 'Séance à planifier' }} · {{ event.occurrences.length }} séance(s)</small><a [routerLink]="['/events', event.id]">Ouvrir le dossier →</a></article><p class="empty" *ngIf="!events.length">Aucun événement à afficher.</p></section>
+        <div class="events-workspace" *ngIf="!loading && !calendarView"><section class="table-panel event-directory-table">
+          <div class="table-wrap" (scroll)="closeMenuOnScroll()">
+            <table class="event-table" aria-label="Liste des événements">
+              <thead>
+                <tr>
+                  <th class="check-column"><input type="checkbox" aria-label="Sélectionner tous les événements affichés" [checked]="allVisibleSelected" (change)="toggleVisibleSelection($event)" /></th>
+                  <th class="number-column">N°</th>
+                  <th class="sortable" (click)="sortBy('title')"><span>Titre</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'title' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'title' && sortDirection === 'desc'">⌄</i></span></th>
+                  <th class="sortable" (click)="sortBy('category')"><span>Catégorie</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'category' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'category' && sortDirection === 'desc'">⌄</i></span></th>
+                  <th class="sortable" (click)="sortBy('location')"><span>Église / Campus</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'location' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'location' && sortDirection === 'desc'">⌄</i></span></th>
+                  <th class="sortable" (click)="sortBy('starts_at')"><span>Prochaine séance</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'starts_at' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'starts_at' && sortDirection === 'desc'">⌄</i></span></th>
+                  <th class="sortable" (click)="sortBy('status')"><span>Statut</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'status' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'status' && sortDirection === 'desc'">⌄</i></span></th>
+                  <th class="actions-column">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let event of pagedEvents; let i = index; trackBy: trackById" (click)="viewDetails(event)">
+                  <td class="check-column"><input type="checkbox" [attr.aria-label]="'Sélectionner ' + event.title" [checked]="selectedEventIds.has(event.id)" (click)="$event.stopPropagation()" (change)="toggleEventSelection(event.id, $event)" /></td>
+                  <td class="number-column"><span class="event-number">#{{ rangeStart + i }}</span></td>
+                  <td><div class="event-name-cell"><strong [title]="event.title">{{ event.title }}</strong></div></td>
+                  <td>{{ event.category || 'Sans catégorie' }}</td>
+                  <td>{{ event.scope === 'CAMPUS' ? event.campus_name : event.church_name || 'Organisation' }}</td>
+                  <td>{{ event.occurrences.length ? (event.occurrences[0].starts_at | date:'dd/MM/yyyy HH:mm':event.timezone) : 'Séance à planifier' }}</td>
+                  <td><span class="event-status" [attr.data-status]="event.status">{{ statusLabel(event.status) }}</span></td>
+                  <td class="actions-column">
+                    <div class="context-wrap">
+                      <button type="button" class="context-trigger" aria-label="Actions événement" (click)="toggleMenu(event.id, $event)"><span></span><span></span><span></span></button>
+                      <div class="context-menu" *ngIf="openMenuId === event.id" [style.top.px]="menuPosition.top" [style.left.px]="menuPosition.left" (click)="$event.stopPropagation()">
+                        <button type="button" (click)="viewDetails(event)">Voir le dossier</button>
+                        <button type="button" *ngIf="event.status === 'DRAFT'" (click)="changeListEventStatus(event, 'PUBLISHED')">Publier</button>
+                        <button type="button" *ngIf="event.status === 'PUBLISHED'" (click)="changeListEventStatus(event, 'IN_PROGRESS')">Démarrer</button>
+                        <button type="button" *ngIf="event.status === 'IN_PROGRESS'" (click)="changeListEventStatus(event, 'COMPLETED')">Terminer</button>
+                        <button type="button" *ngIf="event.status === 'DRAFT' || event.status === 'PUBLISHED' || event.status === 'IN_PROGRESS'" class="danger" (click)="changeListEventStatus(event, 'CANCELLED', true)">Annuler la série</button>
+                        <button type="button" *ngIf="event.status === 'COMPLETED' || event.status === 'CANCELLED'" class="danger" (click)="changeListEventStatus(event, 'ARCHIVED')">Archiver</button>
+                        <button type="button" *ngIf="event.status === 'PUBLISHED'" (click)="copyToClipboard(registrationUrl(event), 'lien d’inscription')">Copier le lien d’inscription</button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <tr *ngIf="!pagedEvents.length"><td colspan="8" class="empty">{{ events.length ? 'Aucun résultat.' : 'Aucun événement à afficher.' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <footer class="event-table-footer"><span>Affichage de {{ rangeStart }} à {{ rangeEnd }} sur {{ filteredEvents.length }} événements</span><div class="event-pagination"><button type="button" aria-label="Page précédente" [disabled]="pageIndex === 0" (click)="changePage(-1)">‹</button><button *ngFor="let page of visiblePages" type="button" [class.current-page]="page === pageIndex" (click)="goToPage(page)">{{ page + 1 }}</button><span class="page-ellipsis" *ngIf="pageCount > 5">…</span><button *ngIf="pageCount > 5" type="button" [class.current-page]="pageIndex === pageCount - 1" (click)="goToPage(pageCount - 1)">{{ pageCount }}</button><button type="button" aria-label="Page suivante" [disabled]="pageIndex + 1 >= pageCount" (click)="changePage(1)">›</button></div></footer>
+        </section></div>
       </ng-container>
 
       <ng-template #eventDetail>
@@ -120,7 +164,7 @@ interface EventCalendarCell {
     </main>
   `,
   styles: [`
-    :host{display:block;color:#25323a}.page{max-width:1320px;margin:0 auto;padding-bottom:32px}.heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 18px}.eyebrow{margin:0 0 6px;color:#148451;font-size:.72rem;font-weight:800}.heading h1{margin:0;font-size:1.7rem}.heading p:not(.eyebrow){margin:5px 0 0;color:#718087}.primary,.secondary,.quiet,.danger{min-height:38px;padding:8px 12px;border:1px solid #176b50;background:#176b50;color:#fff;font-weight:700;cursor:pointer}.secondary,.quiet{border-color:#d4dfdc;background:#fff;color:#34434a}.danger{border-color:#bb4444;background:#fff;color:#a33434}.primary:disabled{opacity:.55;cursor:not-allowed}.toolbar,.status-actions{display:flex;gap:10px;align-items:center;margin-bottom:15px;padding:13px;background:#fff;border:1px solid #e0e6e6}.toolbar input,.toolbar select,.form-grid input,.form-grid select,textarea,.scan-form input{min-height:38px;padding:8px 10px;border:1px solid #cfd9d6;background:#fff;color:#25323a;font:inherit}.toolbar input{flex:1}.create-panel,.panel,.card{padding:17px;background:#fff;border:1px solid #e0e6e6}.create-panel,.edit-form{margin:0 0 16px}.create-panel h2,.panel h2,.edit-form h2{margin:0;font-size:1rem}.create-panel form,.edit-form{display:grid;gap:12px;margin-top:13px}.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.form-grid label,.create-panel form>label,.edit-form>label{display:grid;gap:5px;color:#53615e;font-size:.8rem;font-weight:700}.actions{display:flex;gap:8px;justify-content:flex-end}.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:13px}.card{display:grid;gap:9px}.card-head{display:flex;justify-content:space-between;gap:8px}.card p{margin:0;color:#68777c;font-size:.85rem}.card small,.occurrence span,.occurrence small,.record small{color:#748188;font-size:.75rem}.card a,.back{color:#176b50;text-decoration:none;font-weight:700;font-size:.83rem}.status{height:max-content;padding:5px 8px;background:#e6f3e9;color:#256844;font-size:.68rem;font-weight:800;white-space:nowrap}.status[data-status=DRAFT],.status[data-status=WAITLISTED],.status[data-status=OFFERED]{background:#fff2d8;color:#8a5a0a}.status[data-status=CANCELLED],.status[data-status=REVOKED],.status[data-status=EXPIRED]{background:#f1e9e9;color:#834747}.empty{padding:18px;color:#748188;text-align:center}.notice{padding:10px 12px;margin:0 0 12px}.notice.error{background:#fff0ef;color:#a13333}.notice.success{background:#e9f5ed;color:#23613a}.back{display:inline-block;margin-bottom:14px}.panel{margin-bottom:14px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #edf0f0}.occurrence-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:11px}.occurrence{display:grid;gap:4px;padding:10px;border:1px solid #dce4e2;background:#fff;text-align:left;cursor:pointer}.occurrence.selected{border-color:#176b50;background:#eff8f2}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.record{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 0;border-top:1px solid #edf0f0}.record>div{display:grid;gap:4px}.scan-tools{display:grid;gap:9px;margin-bottom:12px}.camera{width:min(100%,420px);max-height:300px;background:#172624}.scan-form{display:flex;gap:8px}.scan-form input{flex:1;min-width:0}.scan-result{padding:12px;border:1px solid #d7e2df;background:#f8fbf9}.scan-result[data-result=CANCELLED],.scan-result[data-result=INVALID],.scan-result[data-result=INELIGIBLE],.scan-result[data-result=WRONG_OCCURRENCE]{border-color:#eac4c4;background:#fff6f6;color:#863535}.qr{display:block;width:180px;height:180px;margin:12px auto}@media(max-width:800px){.form-grid,.detail-grid{grid-template-columns:1fr}.heading{align-items:flex-start;flex-direction:column}.toolbar{align-items:stretch;flex-direction:column}.panel-head{align-items:flex-start;flex-direction:column}.record{align-items:flex-start}.status-actions{flex-wrap:wrap}}
+    :host{display:block;color:#1B2A24}.page{max-width:1320px;margin:0 auto;padding-bottom:32px}.heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 18px}.eyebrow{margin:0 0 6px;color:#2A8768;font-size:.72rem;font-weight:800}.heading h1{margin:0;font-size:1.7rem}.heading p:not(.eyebrow){margin:5px 0 0;color:#7A8A84}.primary,.secondary,.quiet,.danger{min-height:38px;padding:8px 12px;border:1px solid #2A8768;background:#2A8768;color:#fff;font-weight:700;cursor:pointer}.secondary,.quiet{border-color:#E3EAE6;background:#fff;color:#1B2A24}.danger{border-color:#dc2626;background:#fff;color:#dc2626}.primary:disabled{opacity:.55;cursor:not-allowed}.toolbar,.status-actions{display:flex;gap:10px;align-items:center;margin-bottom:15px;padding:13px;background:#fff;border:1px solid #E3EAE6}.toolbar input,.toolbar select,.form-grid input,.form-grid select,textarea,.scan-form input{min-height:38px;padding:8px 10px;border:1px solid #E3EAE6;background:#fff;color:#1B2A24;font:inherit}.toolbar input{flex:1}.create-panel,.panel,.card{padding:17px;background:#fff;border:1px solid #E3EAE6}.create-panel,.edit-form{margin:0 0 16px}.create-panel h2,.panel h2,.edit-form h2{margin:0;font-size:1rem}.create-panel form,.edit-form{display:grid;gap:12px;margin-top:13px}.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.form-grid label,.create-panel form>label,.edit-form>label{display:grid;gap:5px;color:#7A8A84;font-size:.8rem;font-weight:700}.actions{display:flex;gap:8px;justify-content:flex-end}.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:13px}.card{display:grid;gap:9px}.card-head{display:flex;justify-content:space-between;gap:8px}.card p{margin:0;color:#7A8A84;font-size:.85rem}.card small,.occurrence span,.occurrence small,.record small{color:#7A8A84;font-size:.75rem}.card a,.back{color:#2A8768;text-decoration:none;font-weight:700;font-size:.83rem}.status{height:max-content;padding:5px 8px;background:#f0fdf4;color:#16a34a;font-size:.68rem;font-weight:800;white-space:nowrap}.status[data-status=DRAFT],.status[data-status=WAITLISTED],.status[data-status=OFFERED]{background:#fff2d8;color:#d97706}.status[data-status=CANCELLED],.status[data-status=REVOKED],.status[data-status=EXPIRED]{background:#f1e9e9;color:#834747}.empty{padding:18px;color:#7A8A84;text-align:center}.notice{padding:10px 12px;margin:0 0 12px}.notice.error{background:#fff0ef;color:#dc2626}.notice.success{background:#f0fdf4;color:#23613a}.back{display:inline-block;margin-bottom:14px}.panel{margin-bottom:14px}.panel-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #E3EAE6}.occurrence-list{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:11px}.occurrence{display:grid;gap:4px;padding:10px;border:1px solid #E3EAE6;background:#fff;text-align:left;cursor:pointer}.occurrence.selected{border-color:#2A8768;background:#f0fdf4}.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.record{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 0;border-top:1px solid #E3EAE6}.record>div{display:grid;gap:4px}.scan-tools{display:grid;gap:9px;margin-bottom:12px}.camera{width:min(100%,420px);max-height:300px;background:#172624}.scan-form{display:flex;gap:8px}.scan-form input{flex:1;min-width:0}.scan-result{padding:12px;border:1px solid #d7e2df;background:#F7FAF8}.scan-result[data-result=CANCELLED],.scan-result[data-result=INVALID],.scan-result[data-result=INELIGIBLE],.scan-result[data-result=WRONG_OCCURRENCE]{border-color:#eac4c4;background:#fff6f6;color:#863535}.qr{display:block;width:180px;height:180px;margin:12px auto}@media(max-width:800px){.form-grid,.detail-grid{grid-template-columns:1fr}.heading{align-items:flex-start;flex-direction:column}.toolbar{align-items:stretch;flex-direction:column}.panel-head{align-items:flex-start;flex-direction:column}.record{align-items:flex-start}.status-actions{flex-wrap:wrap}}
   `],
 })
 export class EventManagementComponent implements OnInit, OnDestroy {
@@ -172,6 +216,13 @@ export class EventManagementComponent implements OnInit, OnDestroy {
   errorMessage = '';
   successMessage = '';
   selfCheckinQr = '';
+  selectedEventIds = new Set<string>();
+  openMenuId: string | null = null;
+  menuPosition = { top: 0, left: 0 };
+  sortField: 'title' | 'category' | 'location' | 'starts_at' | 'status' = 'title';
+  sortDirection: 'asc' | 'desc' = 'asc';
+  pageIndex = 0;
+  readonly pageSize = 10;
   private scannerControls?: IScannerControls;
   private reader = new BrowserMultiFormatReader();
 
@@ -221,6 +272,7 @@ export class EventManagementComponent implements OnInit, OnDestroy {
   constructor(
     private fb: FormBuilder,
     private route: ActivatedRoute,
+    private router: Router,
     private eventsApi: EventService,
     private tenant: TenantService,
   ) {}
@@ -666,6 +718,96 @@ export class EventManagementComponent implements OnInit, OnDestroy {
     const selected = Array.from((event.target as HTMLSelectElement).selectedOptions).map((option) => option.value);
     this.eventForm.controls.included_church_ids.setValue(selected);
   }
+
+  /* ---- Event directory table (dense, member/family style) ---- */
+  get categories(): string[] { return [...new Set(this.events.map((event) => event.category).filter((value): value is string => !!value))].sort(); }
+  get filteredEvents(): ChurchEvent[] {
+    const direction = this.sortDirection === 'asc' ? 1 : -1;
+    return [...this.events].sort((a, b) => this.sortValue(a).localeCompare(this.sortValue(b), 'fr', { sensitivity: 'base' }) * direction);
+  }
+  get pagedEvents(): ChurchEvent[] { const start = this.pageIndex * this.pageSize; return this.filteredEvents.slice(start, start + this.pageSize); }
+  get pageCount(): number { return Math.max(1, Math.ceil(this.filteredEvents.length / this.pageSize)); }
+  get rangeStart(): number { return this.filteredEvents.length ? this.pageIndex * this.pageSize + 1 : 0; }
+  get rangeEnd(): number { return Math.min((this.pageIndex + 1) * this.pageSize, this.filteredEvents.length); }
+  get visiblePages(): number[] { return Array.from({ length: Math.min(this.pageCount, 5) }, (_, index) => index); }
+  get allVisibleSelected(): boolean { return this.pagedEvents.length > 0 && this.pagedEvents.every((event) => this.selectedEventIds.has(event.id)); }
+  private sortValue(event: ChurchEvent): string {
+    switch (this.sortField) {
+      case 'category': return event.category ?? '';
+      case 'location': return event.scope === 'CAMPUS' ? event.campus_name ?? '' : (event.church_name ?? 'Organisation');
+      case 'starts_at': return event.occurrences[0]?.starts_at ?? event.updated_at;
+      case 'status': return this.statusLabel(event.status);
+      default: return event.title ?? '';
+    }
+  }
+  toggleEventSelection(id: string, event: Event): void {
+    if ((event.target as HTMLInputElement).checked) this.selectedEventIds.add(id); else this.selectedEventIds.delete(id);
+  }
+  toggleVisibleSelection(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const ids = this.pagedEvents.map((event) => event.id);
+    this.selectedEventIds = new Set([...this.selectedEventIds].filter((id) => !ids.includes(id)));
+    if (checked) ids.forEach((id) => this.selectedEventIds.add(id));
+  }
+  sortBy(field: 'title' | 'category' | 'location' | 'starts_at' | 'status'): void {
+    if (this.sortField === field) this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    else { this.sortField = field; this.sortDirection = 'asc'; }
+    this.pageIndex = 0;
+  }
+  changePage(delta: number): void { this.pageIndex = Math.max(0, Math.min(this.pageCount - 1, this.pageIndex + delta)); }
+  goToPage(page: number): void { this.pageIndex = Math.max(0, Math.min(this.pageCount - 1, page)); }
+  resetEventFilters(): void { this.search = ''; this.statusFilter = ''; this.categoryFilter = ''; this.pageIndex = 0; this.loadEvents(); }
+  viewDetails(event: ChurchEvent): void { this.openMenuId = null; this.router.navigate(['/events', event.id]); }
+  toggleMenu(id: string, event: Event): void {
+    event.stopPropagation();
+    if (this.openMenuId === id) { this.openMenuId = null; return; }
+    const trigger = event.currentTarget as HTMLElement;
+    const rect = trigger.getBoundingClientRect();
+    const width = 232;
+    const estimatedHeight = 260;
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const top = rect.bottom + 6 + estimatedHeight > window.innerHeight
+      ? Math.max(8, rect.top - estimatedHeight - 6)
+      : rect.bottom + 6;
+    this.menuPosition = { top, left };
+    this.openMenuId = id;
+  }
+  @HostListener('window:scroll')
+  closeMenuOnScroll(): void { this.openMenuId = null; }
+  @HostListener('window:resize')
+  closeMenuOnResize(): void { this.openMenuId = null; }
+  @HostListener('document:click', ['$event'])
+  closeMenuOnDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.context-wrap')) this.openMenuId = null;
+  }
+  copyToClipboard(value: string, label: string): void {
+    this.openMenuId = null;
+    if (!value) { this.errorMessage = `Aucun ${label} renseigné.`; return; }
+    const success = () => { this.errorMessage = ''; this.successMessage = `${label} copié.`; };
+    const failure = () => { this.successMessage = ''; this.errorMessage = `Impossible de copier ${label}.`; };
+    if (!navigator.clipboard) { this.copyWithFallback(value, success, failure); return; }
+    navigator.clipboard.writeText(value).then(success).catch(() => this.copyWithFallback(value, success, failure));
+  }
+  private copyWithFallback(value: string, success: () => void, failure: () => void): void {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { if (document.execCommand('copy')) success(); else failure(); } catch { failure(); } finally { document.body.removeChild(textarea); }
+  }
+  changeListEventStatus(event: ChurchEvent, status: string, confirm = false): void {
+    this.openMenuId = null;
+    if (confirm && !window.confirm('Annuler la série ? Les inscriptions et présences existantes seront conservées.')) return;
+    this.eventsApi.changeStatus(event.id, status, confirm).subscribe({
+      next: () => { this.successMessage = 'Statut de l’événement mis à jour.'; this.loadEvents(); },
+      error: (error) => this.errorMessage = this.errorText(error),
+    });
+  }
+  trackById(_index: number, event: ChurchEvent): string { return event.id; }
+  registrationUrl(event: ChurchEvent): string { return `${window.location.origin}/event-registration/${event.id}`; }
 
   private errorText(error: unknown): string {
     if (error instanceof HttpErrorResponse) {

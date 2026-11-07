@@ -1,7 +1,10 @@
 <header class="topbar">
   <div class="topbar-left">
     <button class="menu-button" aria-label="Ouvrir le menu" (click)="menuToggle.emit()">☰</button>
-    <span class="tenant-name" *ngIf="!isFamilyPage && !isMemberPage">ChurchOS</span>
+    <div class="workspace-context">
+      <span class="workspace-eyebrow">Espace de gestion</span>
+      <strong class="workspace-name">{{ organizationName }}</strong>
+    </div>
     <label class="search-box family-global-search" *ngIf="isFamilyPage || isMemberPage">
       <span class="search-icon">⌕</span>
       <input type="search" placeholder="Rechercher un membre, une famille, un événement..." aria-label="Recherche globale" />
@@ -9,21 +12,26 @@
   </div>
 
   <div class="topbar-right">
-    <button *ngIf="isFamilyPage || isMemberPage" class="family-notification" type="button" aria-label="Notifications"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 12a2 2 0 0 0 4 0h-4Z"/></svg></button>
+    <div class="topbar-clock" aria-label="Date et heure">
+      <span class="clock-date">{{ todayLabel }}</span>
+      <span class="clock-time">{{ timeLabel }}</span>
+    </div>
+    <button class="btn-icon" type="button" aria-label="Notifications">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 12a2 2 0 0 0 4 0h-4Z"/></svg>
+    </button>
     <div class="profile-wrap">
-      <button class="profile-button" type="button" (click)="toggleProfile()" aria-label="Profil utilisateur">
+      <button class="user-chip" type="button" (click)="toggleProfile()" aria-label="Profil utilisateur">
         <div class="avatar-mini">{{ user?.username?.slice(0, 2)?.toUpperCase() || 'U' }}</div>
         <div class="profile-meta">
           <span class="name">{{ user?.username || 'Compte utilisateur' }}</span>
           <span class="role">{{ user?.email || 'Session active' }}</span>
         </div>
-        <span class="caret">▾</span>
       </button>
 
       <div class="dropdown-panel profile-panel" *ngIf="profileOpen" aria-label="Menu utilisateur">
         <a *ngIf="user?.is_superuser" class="menu-option" routerLink="/admin" (click)="profileOpen = false">Administration de la plateforme</a>
         <a *ngIf="isTenantAdmin" class="menu-option" routerLink="/admin/churches" (click)="profileOpen = false">Gérer les églises</a>
-        <a class="menu-option" routerLink="/profile" (click)="profileOpen = false">Mon profil membre</a>
+        <a class="menu-option" routerLink="/profile" (click)="profileOpen = false">Mon profil</a>
         <button class="menu-option danger" type="button" (click)="logout()">Déconnexion</button>
       </div>
     </div>

@@ -4,11 +4,24 @@ export interface Church {
   slug?: string;
   pastor_name?: string;
   organization?: string;
+  organization_name?: string;
   phone?: string;
   address?: string;
   email?: string;
   country?: string;
   is_active?: boolean;
+}
+
+export interface PlatformUser {
+  id: number | string;
+  username: string;
+  email: string;
+  is_superuser: boolean;
+  is_active: boolean;
+  last_login: string | null;
+  organization: string | null;
+  organization_id: string | null;
+  role: string | null;
 }
 
 export interface Campus {

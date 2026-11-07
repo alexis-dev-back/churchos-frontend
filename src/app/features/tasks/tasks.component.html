@@ -1,0 +1,336 @@
+<main class="tasks-page">
+  <nav class="tasks-breadcrumbs" aria-label="Fil d’Ariane">
+    <a routerLink="/dashboard">Accueil</a><span>›</span><strong>Mes tâches</strong>
+  </nav>
+
+  <header class="tasks-heading">
+    <div class="tasks-heading-title">
+      <span class="tasks-title-icon" aria-hidden="true">✓</span>
+      <div>
+        <h1>Mes tâches</h1>
+        <p>Enregistrez vos tâches, priorisez-les et suivez leur avancement.</p>
+      </div>
+    </div>
+    <div class="tasks-heading-actions">
+      <span class="tasks-date">{{ todayLabel }}</span>
+      <button class="tasks-secondary-button" type="button" (click)="loadTasks(true)" [disabled]="loading">
+        Actualiser
+      </button>
+    </div>
+  </header>
+
+  <p class="tasks-feedback error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
+  <p class="tasks-feedback success" *ngIf="successMessage" role="status">{{ successMessage }}</p>
+
+  <section class="tasks-stats" aria-label="Aperçu des tâches">
+    <article class="tasks-stat-card">
+      <span class="tasks-stat-icon neutral" aria-hidden="true">◈</span>
+      <div>
+        <strong>{{ summary.total }}</strong>
+        <span>Total</span>
+      </div>
+    </article>
+    <article class="tasks-stat-card">
+      <span class="tasks-stat-icon todo" aria-hidden="true">◔</span>
+      <div>
+        <strong>{{ summary.todo }}</strong>
+        <span>À faire</span>
+      </div>
+    </article>
+    <article class="tasks-stat-card">
+      <span class="tasks-stat-icon progress" aria-hidden="true">◐</span>
+      <div>
+        <strong>{{ summary.in_progress }}</strong>
+        <span>En cours</span>
+      </div>
+    </article>
+    <article class="tasks-stat-card">
+      <span class="tasks-stat-icon done" aria-hidden="true">✓</span>
+      <div>
+        <strong>{{ summary.done }}</strong>
+        <span>Terminées</span>
+      </div>
+    </article>
+    <article class="tasks-stat-card" [class.attention]="summary.overdue > 0">
+      <span class="tasks-stat-icon overdue" aria-hidden="true">!</span>
+      <div>
+        <strong>{{ summary.overdue }}</strong>
+        <span>En retard</span>
+      </div>
+    </article>
+  </section>
+
+  <section class="tasks-progress-card" aria-label="Progression des tâches">
+    <div class="tasks-progress-heading">
+      <div>
+        <h2>Progression</h2>
+        <p>{{ summary.done }} sur {{ summary.total }} tâche(s) terminée(s)</p>
+      </div>
+      <strong>{{ summary.completion_rate }} %</strong>
+    </div>
+    <div class="tasks-progress-track" role="progressbar" [attr.aria-valuenow]="summary.completion_rate" aria-valuemin="0" aria-valuemax="100">
+      <span [style.width.%]="summary.completion_rate"></span>
+    </div>
+  </section>
+
+  <section class="tasks-composer" aria-labelledby="tasks-composer-title">
+    <div class="tasks-composer-heading">
+      <div>
+        <h2 id="tasks-composer-title">Nouvelle tâche</h2>
+        <p>Ajoutez une action à suivre. Elle restera personnelle à votre espace.</p>
+      </div>
+    </div>
+
+    <form class="tasks-form" (ngSubmit)="addTask()">
+      <div class="tasks-form-grid">
+        <label class="tasks-field tasks-field-title">
+          <span>Titre <b>*</b></span>
+          <input
+            type="text"
+            name="newTaskTitle"
+            [(ngModel)]="newTask.title"
+            maxlength="220"
+            required
+            placeholder="Ex. Préparer le sermon de dimanche"
+            autocomplete="off"
+          />
+        </label>
+        <label class="tasks-field">
+          <span>Échéance</span>
+          <input type="date" name="newTaskDueDate" [(ngModel)]="newTask.due_date" />
+        </label>
+        <label class="tasks-field">
+          <span>Priorité</span>
+          <select name="newTaskPriority" [(ngModel)]="newTask.priority">
+            <option *ngFor="let option of priorityOptions" [value]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+      </div>
+
+      <label class="tasks-field">
+        <span>Description <small>facultatif</small></span>
+        <textarea
+          name="newTaskDescription"
+          [(ngModel)]="newTask.description"
+          rows="2"
+          maxlength="2000"
+          placeholder="Détails, personnes à contacter, prochaines étapes…"
+        ></textarea>
+      </label>
+
+      <div class="tasks-form-actions">
+        <span class="tasks-form-hint">Les tâches sont rattachées à votre organisation active.</span>
+        <button class="tasks-primary-button" type="submit" [disabled]="creating || !newTask.title.trim()">
+          {{ creating ? 'Ajout…' : 'Ajouter la tâche' }}
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section class="tasks-list-panel" aria-labelledby="tasks-list-title">
+    <div class="tasks-list-heading">
+      <div>
+        <h2 id="tasks-list-title">Suivi des tâches</h2>
+        <p>{{ visibleTasks.length }} tâche(s) affichée(s)</p>
+      </div>
+      <nav class="tasks-view-toggle" aria-label="Affichage des tâches">
+        <button type="button" [class.active]="view === 'list'" [attr.aria-pressed]="view === 'list'" (click)="view = 'list'">Liste</button>
+        <button type="button" [class.active]="view === 'calendar'" [attr.aria-pressed]="view === 'calendar'" (click)="view = 'calendar'">Planning</button>
+      </nav>
+    </div>
+
+    <div class="tasks-toolbar">
+      <nav class="tasks-filters" aria-label="Filtrer les tâches">
+        <button
+          *ngFor="let item of filters"
+          type="button"
+          [class.active]="filter === item.key"
+          (click)="filter = item.key"
+        >
+          {{ item.label }} <span>{{ filterCount(item.key) }}</span>
+        </button>
+      </nav>
+      <div class="tasks-tools">
+        <label class="tasks-search">
+          <span class="visually-hidden">Rechercher une tâche</span>
+          <input type="search" [(ngModel)]="search" placeholder="Rechercher…" />
+        </label>
+        <label class="tasks-priority-filter">
+          <span class="visually-hidden">Filtrer par priorité</span>
+          <select [(ngModel)]="priorityFilter">
+            <option value="ALL">Toutes priorités</option>
+            <option *ngFor="let option of priorityOptions" [value]="option.value">{{ option.label }}</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <p class="tasks-loading" *ngIf="loading" role="status">Chargement de vos tâches…</p>
+
+    <section class="tasks-calendar" *ngIf="view === 'calendar' && !loading" aria-label="Planning mensuel des tâches">
+      <header class="tasks-calendar-heading">
+        <div class="tasks-calendar-navigation">
+          <button class="tasks-secondary-button" type="button" aria-label="Mois précédent" (click)="shiftCalendarMonth(-1)">←</button>
+          <button class="tasks-secondary-button" type="button" (click)="goToCurrentMonth()">Aujourd’hui</button>
+          <button class="tasks-secondary-button" type="button" aria-label="Mois suivant" (click)="shiftCalendarMonth(1)">→</button>
+        </div>
+        <h3>{{ calendarMonthLabel }}</h3>
+      </header>
+      <div class="tasks-calendar-grid">
+        <div class="tasks-calendar-weekday" *ngFor="let weekday of weekdays">{{ weekday }}</div>
+        <article
+          class="tasks-calendar-day"
+          *ngFor="let cell of calendarCells; trackBy: trackByCalendarCell"
+          [class.outside-month]="!cell.inCurrentMonth"
+          [class.today]="cell.isToday"
+        >
+          <time [attr.datetime]="cell.date">{{ cell.day }}</time>
+          <div class="tasks-calendar-day-items">
+            <article
+              class="tasks-calendar-task"
+              *ngFor="let task of cell.tasks; trackBy: trackByTaskId"
+              [class.overdue]="task.is_overdue"
+              [class.completed]="task.status === 'DONE'"
+              [class.cancelled]="task.status === 'CANCELLED'"
+              [attr.data-priority]="task.priority"
+            >
+              <strong [title]="task.title">{{ task.title }}</strong>
+              <span>{{ task.status_label }} · {{ task.priority_label }}</span>
+              <div>
+                <button
+                  *ngIf="task.status !== 'DONE' && task.status !== 'CANCELLED'"
+                  type="button"
+                  (click)="changeStatus(task, 'DONE')"
+                  [disabled]="busyTaskId === task.id"
+                >Terminer</button>
+                <button type="button" (click)="editTaskFromCalendar(task)">Modifier</button>
+              </div>
+            </article>
+          </div>
+        </article>
+      </div>
+      <p class="tasks-calendar-empty" *ngIf="!calendarHasTasks">
+        Aucune tâche avec échéance ce mois-ci. Ajoutez une échéance à une tâche pour la planifier.
+      </p>
+    </section>
+
+    <div class="tasks-empty" *ngIf="view === 'list' && !loading && !visibleTasks.length">
+      <span class="tasks-empty-icon" aria-hidden="true">✓</span>
+      <strong>{{ hasTasks ? 'Aucune tâche ne correspond à vos filtres.' : 'Votre liste est vide.' }}</strong>
+      <p>{{ hasTasks ? 'Modifiez votre recherche ou vos filtres pour retrouver une tâche.' : 'Ajoutez votre première tâche pour commencer à suivre votre travail.' }}</p>
+    </div>
+
+    <div class="tasks-list" *ngIf="view === 'list' && !loading && visibleTasks.length">
+      <article
+        class="task-card"
+        *ngFor="let task of visibleTasks; trackBy: trackByTaskId"
+        [class.is-done]="task.status === 'DONE'"
+        [class.is-cancelled]="task.status === 'CANCELLED'"
+        [class.is-overdue]="task.is_overdue"
+        [class.editing]="editingId === task.id"
+      >
+        <ng-container *ngIf="editingId !== task.id; else editTemplate">
+          <div class="task-check">
+            <button
+              class="task-check-button"
+              type="button"
+              [class.checked]="task.status === 'DONE'"
+              [disabled]="busyTaskId === task.id"
+              [attr.aria-label]="task.status === 'DONE' ? 'Rouvrir la tâche' : 'Marquer la tâche comme terminée'"
+              [attr.aria-pressed]="task.status === 'DONE'"
+              (click)="toggleDone(task)"
+            >
+              <span aria-hidden="true">{{ task.status === 'DONE' ? '✓' : '' }}</span>
+            </button>
+          </div>
+
+          <div class="task-body">
+            <div class="task-title-row">
+              <h3>{{ task.title }}</h3>
+              <span class="task-priority" [attr.data-priority]="task.priority">{{ task.priority_label }}</span>
+              <span class="task-status" [attr.data-status]="task.status">{{ task.status_label }}</span>
+            </div>
+            <p class="task-description" *ngIf="task.description">{{ task.description }}</p>
+            <div class="task-meta">
+              <span class="task-due" [class.overdue]="task.is_overdue">◷ {{ dueDateLabel(task) }}</span>
+              <span class="task-completed" *ngIf="task.completed_at">Terminée le {{ task.completed_at | date:'dd/MM/yyyy' }}</span>
+            </div>
+          </div>
+
+          <div class="task-actions">
+            <select
+              class="task-status-select"
+              [ngModel]="task.status"
+              (ngModelChange)="changeStatus(task, $event)"
+              [disabled]="busyTaskId === task.id"
+              aria-label="Changer le statut de la tâche"
+            >
+              <option *ngFor="let option of statusOptions" [value]="option.value">{{ option.label }}</option>
+            </select>
+            <button class="task-icon-button" type="button" (click)="beginEdit(task)" title="Modifier" aria-label="Modifier la tâche">
+              ✎
+            </button>
+            <button class="task-icon-button danger" type="button" (click)="requestDelete(task)" title="Supprimer" aria-label="Supprimer la tâche">
+              🗑
+            </button>
+          </div>
+        </ng-container>
+
+        <ng-template #editTemplate>
+          <form class="task-edit-form" (ngSubmit)="saveEdit()">
+            <div class="task-edit-heading">
+              <h3>Modifier la tâche</h3>
+              <button class="task-close-button" type="button" (click)="cancelEdit()" aria-label="Fermer la modification">×</button>
+            </div>
+            <div class="task-edit-grid">
+              <label class="tasks-field tasks-field-title">
+                <span>Titre <b>*</b></span>
+                <input type="text" name="editTaskTitle" [(ngModel)]="editTask.title" maxlength="220" required />
+              </label>
+              <label class="tasks-field">
+                <span>Échéance</span>
+                <input type="date" name="editTaskDueDate" [(ngModel)]="editTask.due_date" />
+              </label>
+              <label class="tasks-field">
+                <span>Priorité</span>
+                <select name="editTaskPriority" [(ngModel)]="editTask.priority">
+                  <option *ngFor="let option of priorityOptions" [value]="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+              <label class="tasks-field">
+                <span>Statut</span>
+                <select name="editTaskStatus" [(ngModel)]="editTask.status">
+                  <option *ngFor="let option of statusOptions" [value]="option.value">{{ option.label }}</option>
+                </select>
+              </label>
+            </div>
+            <label class="tasks-field">
+              <span>Description <small>facultatif</small></span>
+              <textarea name="editTaskDescription" [(ngModel)]="editTask.description" rows="2" maxlength="2000"></textarea>
+            </label>
+            <div class="task-edit-actions">
+              <button class="tasks-secondary-button" type="button" (click)="cancelEdit()" [disabled]="savingEdit">Annuler</button>
+              <button class="tasks-primary-button" type="submit" [disabled]="savingEdit || !editTask.title.trim()">
+                {{ savingEdit ? 'Enregistrement…' : 'Enregistrer' }}
+              </button>
+            </div>
+          </form>
+        </ng-template>
+      </article>
+    </div>
+  </section>
+
+  <div class="tasks-modal-backdrop" *ngIf="deleteTarget" (click)="cancelDelete()">
+    <section class="tasks-modal" role="dialog" aria-modal="true" aria-labelledby="tasks-delete-title" (click)="$event.stopPropagation()">
+      <span class="tasks-modal-icon" aria-hidden="true">!</span>
+      <h2 id="tasks-delete-title">Supprimer cette tâche ?</h2>
+      <p>« {{ deleteTarget.title }} » sera définitivement supprimée. Cette action est irréversible.</p>
+      <div class="tasks-modal-actions">
+        <button class="tasks-secondary-button" type="button" (click)="cancelDelete()" [disabled]="deleting">Annuler</button>
+        <button class="tasks-danger-button" type="button" (click)="confirmDelete()" [disabled]="deleting">
+          {{ deleting ? 'Suppression…' : 'Supprimer la tâche' }}
+        </button>
+      </div>
+    </section>
+  </div>
+</main>

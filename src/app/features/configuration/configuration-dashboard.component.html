@@ -13,6 +13,7 @@
 
   <nav class="tabs" aria-label="Sections de configuration">
     <button type="button" [class.selected]="tab === 'church'" (click)="setTab('church')">Église</button>
+    <button type="button" [class.selected]="tab === 'finance'" (click)="setTab('finance')">Finances</button>
     <button type="button" [class.selected]="tab === 'users'" (click)="setTab('users')">Utilisateurs <span>{{ users.length }}</span></button>
     <button type="button" [class.selected]="tab === 'roles'" (click)="setTab('roles')">Rôles & permissions <span>{{ roles.length }}</span></button>
     <button type="button" [class.selected]="tab === 'assignments'" (click)="setTab('assignments')">Attributions</button>
@@ -68,6 +69,46 @@
       </form>
     </section>
 
+    <section class="panel" *ngIf="tab === 'finance'">
+      <div class="section-heading">
+        <div><h2>Paramètres financiers</h2><p>Niveau, devise de référence et suspension des opérations financières. Chaque changement est audité.</p></div>
+        <label class="church-picker" *ngIf="churches.length > 1">Église
+          <select [(ngModel)]="selectedChurchId" (ngModelChange)="onChurchChange()">
+            <option *ngFor="let church of churches" [value]="church.church_id">{{ church.name }}</option>
+          </select>
+        </label>
+      </div>
+      <div class="empty" *ngIf="!churches.length">Aucune église active n’est rattachée à cette organisation.</div>
+      <div class="loading" *ngIf="financeConfigurationLoading">Chargement des paramètres financiers…</div>
+      <ng-container *ngIf="!financeConfigurationLoading && !financeConfigurationLoadFailed && selectedChurchId">
+        <div class="finance-config-summary" *ngIf="financeConfiguration as configuration">
+          <span>Version <strong>{{ configuration.version }}</strong></span>
+          <span>État <strong class="status" [class.inactive]="configuration.is_suspended">{{ configuration.is_suspended ? 'Suspendu' : 'Actif' }}</strong></span>
+          <span *ngIf="configuration.is_suspended && configuration.suspension_reason">Motif actuel <strong>{{ configuration.suspension_reason }}</strong></span>
+        </div>
+        <form class="settings-form" (ngSubmit)="saveFinanceConfiguration()">
+          <label>Niveau de gestion
+            <select name="financeLevel" [(ngModel)]="financeConfigurationForm.level" required>
+              <option [ngValue]="1">Niveau 1 — Trésorerie simple</option>
+              <option [ngValue]="2">Niveau 2 — Gestion intermédiaire</option>
+              <option [ngValue]="3">Niveau 3 — Comptabilité avancée</option>
+            </select>
+          </label>
+          <label>Devise de base
+            <input name="financeCurrency" [(ngModel)]="financeConfigurationForm.base_currency" minlength="3" maxlength="3" pattern="[A-Za-z]{3}" required />
+          </label>
+          <label class="check-line"><input name="financeSuspended" type="checkbox" [(ngModel)]="financeConfigurationForm.is_suspended" (ngModelChange)="onFinanceSuspensionChange()" /> Suspendre les opérations financières</label>
+          <label class="full-width" *ngIf="financeConfigurationForm.is_suspended">Motif de suspension *
+            <textarea name="financeSuspensionReason" [(ngModel)]="financeConfigurationForm.suspension_reason" maxlength="500" rows="2" required></textarea>
+          </label>
+          <label class="full-width">Motif de la modification *
+            <textarea name="financeReason" [(ngModel)]="financeConfigurationForm.reason" maxlength="500" rows="3" required placeholder="Le motif est inscrit au journal d’audit."></textarea>
+          </label>
+          <div class="form-actions full-width"><button class="primary" type="submit" [disabled]="saving || !financeConfigurationForm.reason.trim() || (financeConfigurationForm.is_suspended && !financeConfigurationForm.suspension_reason?.trim())">{{ saving ? 'Enregistrement…' : (financeConfiguration ? 'Enregistrer les paramètres' : 'Initialiser les finances') }}</button></div>
+        </form>
+      </ng-container>
+    </section>
+
     <section class="panel" *ngIf="tab === 'users'">
       <div class="section-heading">
         <div><h2>Utilisateurs de l’organisation</h2><p>Les suspensions concernent uniquement cette organisation.</p></div>
@@ -90,7 +131,7 @@
               <td><span class="role-badge">{{ user.role }}</span></td>
               <td><span class="status" [class.inactive]="!user.is_active">{{ user.is_active ? 'Actif' : 'Suspendu' }}</span></td>
               <td>{{ user.account_is_active ? 'Actif' : 'Désactivé' }}</td>
-              <td class="actions"><button type="button" class="quiet" [disabled]="!user.account_is_active" (click)="toggleMembership(user)">{{ user.is_active ? 'Suspendre' : 'Réactiver' }}</button></td>
+              <td class="actions"><button type="button" class="quiet" *ngIf="canResetPasswords" (click)="openPasswordReset(user)">Réinitialiser le mot de passe</button> <button type="button" class="quiet" [disabled]="!user.account_is_active" (click)="toggleMembership(user)">{{ user.is_active ? 'Suspendre' : 'Réactiver' }}</button></td>
             </tr>
             <tr *ngIf="!users.length"><td colspan="5" class="empty">Aucun utilisateur trouvé.</td></tr>
           </tbody>
@@ -187,6 +228,29 @@
       </div>
     </section>
   </ng-container>
+
+  <div class="modal-backdrop" *ngIf="passwordResetModalOpen" (click)="passwordResetModalOpen = false">
+    <section class="role-modal password-reset-modal" role="dialog" aria-modal="true" aria-labelledby="password-reset-title" (click)="$event.stopPropagation()">
+      <header class="modal-heading">
+        <div><p class="eyebrow">SÉCURITÉ DU COMPTE</p><h2 id="password-reset-title">Réinitialiser le mot de passe</h2></div>
+        <button type="button" class="quiet" aria-label="Fermer" (click)="passwordResetModalOpen = false">×</button>
+      </header>
+      <div class="role-basics">
+        <p>Définissez un nouveau mot de passe pour <strong>{{ passwordResetUser?.username }}</strong>.</p>
+        <label>Nouveau mot de passe
+          <input type="password" name="resetPassword" [(ngModel)]="passwordResetForm.password" minlength="8" maxlength="128" autocomplete="new-password" required />
+        </label>
+        <label>Confirmer le nouveau mot de passe
+          <input type="password" name="confirmResetPassword" [(ngModel)]="passwordResetForm.confirmation" minlength="8" maxlength="128" autocomplete="new-password" required />
+        </label>
+        <p class="feedback error" *ngIf="passwordResetForm.confirmation && passwordResetForm.password !== passwordResetForm.confirmation">Les mots de passe ne correspondent pas.</p>
+      </div>
+      <footer class="modal-actions">
+        <button type="button" class="quiet" (click)="passwordResetModalOpen = false">Annuler</button>
+        <button type="button" class="primary" [disabled]="saving || passwordResetForm.password.length < 8 || passwordResetForm.password !== passwordResetForm.confirmation" (click)="resetPassword()">{{ saving ? 'Enregistrement…' : 'Réinitialiser le mot de passe' }}</button>
+      </footer>
+    </section>
+  </div>
 
   <div class="modal-backdrop" *ngIf="roleModalOpen" (click)="roleModalOpen = false">
     <section class="role-modal" role="dialog" aria-modal="true" aria-labelledby="role-modal-title" (click)="$event.stopPropagation()">

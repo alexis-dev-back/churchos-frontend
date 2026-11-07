@@ -39,6 +39,8 @@ export interface FinanceConfigurationPayload {
   level: number;
   base_currency: string;
   reason: string;
+  is_suspended?: boolean;
+  suspension_reason?: string;
 }
 
 export interface FinancialPeriodPayload {
@@ -80,6 +82,15 @@ export interface FinanceAccount {
   created_at: string;
 }
 
+export type FinancePaymentMethod =
+  | 'CASH'
+  | 'BANK_TRANSFER'
+  | 'MOBILE_MONEY'
+  | 'CHEQUE'
+  | 'ONLINE'
+  | 'CARD'
+  | 'OTHER';
+
 export interface FinanceTransaction {
   id: string;
   kind: 'INCOME' | 'EXPENSE';
@@ -100,6 +111,7 @@ export interface FinanceTransaction {
   paid_amount: string;
   remaining_amount: string;
   currency: string;
+  payment_method: FinancePaymentMethod;
   exchange_rate_to_base: string;
   transaction_date: string;
   reference: string;
@@ -243,6 +255,7 @@ export interface FinanceTransactionPayload {
   description: string;
   amount: string;
   currency: string;
+  payment_method: FinancePaymentMethod;
   exchange_rate_to_base: string;
   transaction_date: string;
   reference: string;

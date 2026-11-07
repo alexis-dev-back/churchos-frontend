@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { BehaviorSubject } from 'rxjs';
-import { Campus, Church, ChurchContext, Organization, OrganizationWriteRequest, TenantSiteWriteRequest } from '../models/tenant';
+import { Campus, Church, ChurchContext, Organization, OrganizationWriteRequest, PlatformUser, TenantSiteWriteRequest } from '../models/tenant';
 
 @Injectable({ providedIn: 'root' })
 export class TenantService {
@@ -70,8 +70,16 @@ export class TenantService {
     return this.http.delete<void>(`${this.apiUrl}/superadmin/organizations/${id}/`);
   }
 
+  listAllPlatformChurches(): Observable<Church[]> {
+    return this.http.get<Church[]>(`${this.apiUrl}/superadmin/churches/`);
+  }
+
   listPlatformChurches(organizationId: string): Observable<Church[]> {
     return this.http.get<Church[]>(`${this.apiUrl}/superadmin/organizations/${organizationId}/churches/`);
+  }
+
+  listPlatformUsers(): Observable<PlatformUser[]> {
+    return this.http.get<PlatformUser[]>(`${this.apiUrl}/superadmin/users/`);
   }
 
   createPlatformChurch(organizationId: string, payload: TenantSiteWriteRequest): Observable<Church> {

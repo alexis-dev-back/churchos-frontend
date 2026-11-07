@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit } from '@angular/core';
+import { Component, HostListener, OnInit } from '@angular/core';
 import { FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { AttendanceAlert, AttendanceCampus, AttendanceChurch, AttendanceManagerContext, AttendanceMember, AttendancePolicy, AttendanceSession, AttendanceSessionType, AttendanceWeeklyReport, ExpectedParticipant, MemberAttendanceHistory } from '../../core/models/attendance';
@@ -68,20 +68,68 @@ import { MinistryTribeService } from '../../core/services/ministry-tribe.service
         </form>
       </section>
 
-      <div class="workspace">
-        <section class="session-list">
-          <div class="section-heading"><h2>Séances</h2><label class="filter">Statut<select [(ngModel)]="statusFilter" [ngModelOptions]="{standalone:true}" (change)="loadSessions()"><option value="">Tous</option><option value="PLANNED">Planifiées</option><option value="IN_PROGRESS">En cours</option><option value="CLOSED">Clôturées</option><option value="CANCELLED">Annulées</option></select></label></div>
+      <div class="session-workspace">
+        <section class="session-table-panel">
+          <div class="session-filters">
+            <label class="session-filter">Statut
+              <select [value]="statusFilter" (change)="loadSessions()"><option value="">Tous</option><option value="PLANNED">Planifiées</option><option value="IN_PROGRESS">En cours</option><option value="CLOSED">Clôturées</option><option value="CANCELLED">Annulées</option></select>
+            </label>
+            <button class="session-filter-reset" type="button" (click)="resetSessionFilters()">☷ Filtres</button>
+          </div>
           <p class="muted" *ngIf="loading">Chargement…</p>
-          <button class="session-row" type="button" *ngFor="let session of sessions" [class.selected]="selectedSession?.id === session.id" (click)="selectSession(session)">
-            <span class="session-date">{{ session.starts_at | date:'dd' }}<small>{{ session.starts_at | date:'MMM' }}</small></span>
-            <span class="session-summary"><strong>{{ session.title }}</strong><small>{{ session.starts_at | date:'EEE, dd MMM yyyy · HH:mm' }} · {{ session.church_name || 'Événement inter-églises' }}</small></span>
-            <span class="status" [attr.data-status]="session.status">{{ statusLabel(session.status) }}</span>
-          </button>
-          <p class="empty" *ngIf="!loading && sessions.length === 0">Aucune séance ne correspond aux filtres.</p>
+          <div class="table-wrap" (scroll)="closeMenuOnScroll()">
+            <table class="session-table" aria-label="Liste des séances">
+              <thead>
+                <tr>
+                  <th class="check-column"><input type="checkbox" aria-label="Sélectionner toutes les séances affichées" [checked]="allSessionsVisibleSelected" (change)="toggleVisibleSessionSelection($event)" /></th>
+                  <th class="number-column">N°</th>
+                  <th class="sortable" (click)="sortBySession('title')"><span>Titre</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sessionSortField === 'title' && sessionSortDirection === 'asc'">⌃</i><i [class.active]="sessionSortField === 'title' && sessionSortDirection === 'desc'">⌄</i></span></th>
+                  <th class="sortable" (click)="sortBySession('type')"><span>Type</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sessionSortField === 'type' && sessionSortDirection === 'asc'">⌃</i><i [class.active]="sessionSortField === 'type' && sessionSortDirection === 'desc'">⌄</i></span></th>
+                  <th class="sortable" (click)="sortBySession('location')"><span>Lieu</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sessionSortField === 'location' && sessionSortDirection === 'asc'">⌃</i><i [class.active]="sessionSortField === 'location' && sessionSortDirection === 'desc'">⌄</i></span></th>
+                  <th class="sortable" (click)="sortBySession('starts_at')"><span>Prochaine séance</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sessionSortField === 'starts_at' && sessionSortDirection === 'asc'">⌃</i><i [class.active]="sessionSortField === 'starts_at' && sessionSortDirection === 'desc'">⌄</i></span></th>
+                  <th class="sortable" (click)="sortBySession('status')"><span>Statut</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sessionSortField === 'status' && sessionSortDirection === 'asc'">⌃</i><i [class.active]="sessionSortField === 'status' && sessionSortDirection === 'desc'">⌄</i></span></th>
+                  <th>Présences</th>
+                  <th class="actions-column">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let session of pagedSessions; let i = index; trackBy: trackBySessionId" (click)="selectSession(session)">
+                  <td class="check-column"><input type="checkbox" [attr.aria-label]="'Sélectionner ' + session.title" [checked]="selectedSessionIds.has(session.id)" (click)="$event.stopPropagation()" (change)="toggleSessionSelection(session.id, $event)" /></td>
+                  <td class="number-column"><span class="session-number">#{{ sessionRangeStart + i }}</span></td>
+                  <td><strong>{{ session.title }}</strong></td>
+                  <td>{{ session.session_type_name || 'Ponctuelle' }}</td>
+                  <td>{{ session.church_name || session.campus_name || '—' }}</td>
+                  <td>{{ session.starts_at | date:'dd/MM/yyyy HH:mm' }}</td>
+                  <td><span class="session-status" [attr.data-status]="session.status">{{ statusLabel(session.status) }}</span></td>
+                  <td>{{ session.present_count }} / {{ session.expected_count }}</td>
+                  <td class="actions-column">
+                    <div class="context-wrap">
+                      <button type="button" class="context-trigger" aria-label="Actions séance" (click)="toggleMenu(session.id, $event)"><span></span><span></span><span></span></button>
+                      <div class="context-menu" *ngIf="openMenuId === session.id" [style.top.px]="menuPosition.top" [style.left.px]="menuPosition.left" (click)="$event.stopPropagation()">
+                        <button type="button" (click)="viewSessionDetails(session)">Voir les détails</button>
+                        <button type="button" *ngIf="session.status === 'PLANNED'" (click)="transition(session, 'open')">Ouvrir le pointage</button>
+                        <button type="button" *ngIf="session.status === 'PLANNED'" (click)="transition(session, 'close')">Clôturer</button>
+                        <button type="button" *ngIf="session.status === 'PLANNED' || session.status === 'IN_PROGRESS'" (click)="transition(session, 'cancel')">Annuler</button>
+                        <button type="button" *ngIf="session.status === 'IN_PROGRESS'" (click)="transition(session, 'close')">Clôturer</button>
+                        <button type="button" *ngIf="session.status === 'CANCELLED'" (click)="transition(session, 'open')">Restaurer</button>
+                        <button type="button" class="danger" *ngIf="session.status === 'CLOSED'" (click)="archiveSession(session)">Archiver</button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <tr *ngIf="!pagedSessions.length"><td colspan="9" class="empty">{{ loading ? 'Chargement…' : 'Aucune séance ne correspond aux filtres.' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <footer class="session-table-footer"><span>Affichage de {{ sessionRangeStart }} à {{ sessionRangeEnd }} sur {{ filteredSessions.length }} séances</span><div class="session-pagination"><button type="button" aria-label="Page précédente" [disabled]="sessionPageIndex === 0" (click)="changeSessionPage(-1)">‹</button><button *ngFor="let page of visibleSessionPages" type="button" [class.current-page]="page === sessionPageIndex" (click)="goToSessionPage(page)">{{ page + 1 }}</button><span class="page-ellipsis" *ngIf="sessionPageCount > 5">…</span><button *ngIf="sessionPageCount > 5" type="button" [class.current-page]="sessionPageIndex === sessionPageCount - 1" (click)="goToSessionPage(sessionPageCount - 1)">{{ sessionPageCount }}</button><button type="button" aria-label="Page suivante" [disabled]="sessionPageIndex + 1 >= sessionPageCount" (click)="changeSessionPage(1)">›</button></div></footer>
         </section>
-
-        <section class="session-detail" *ngIf="selectedSession as session">
-          <div class="detail-heading"><div><p class="eyebrow">{{ statusLabel(session.status) }}</p><h2>{{ session.title }}</h2><p>{{ session.starts_at | date:'fullDate' }} · {{ session.starts_at | date:'shortTime' }} – {{ session.ends_at | date:'shortTime' }}</p></div>
+        <section class="participant-panel" *ngIf="selectedSession as session">
+          <div class="participant-heading">
+            <div>
+              <p class="eyebrow">{{ statusLabel(session.status) }}</p>
+              <h2>{{ session.title }}</h2>
+              <p>{{ session.starts_at | date:'fullDate' }} · {{ session.starts_at | date:'shortTime' }} – {{ session.ends_at | date:'shortTime' }}</p>
+            </div>
             <div class="actions" *ngIf="session.status !== 'CANCELLED' && !session.event_occurrence">
               <button class="primary" *ngIf="session.status === 'PLANNED'" (click)="transition(session, 'open')">Ouvrir le pointage</button>
               <button class="primary" *ngIf="session.status === 'IN_PROGRESS'" (click)="transition(session, 'close')">Clôturer</button>
@@ -102,22 +150,21 @@ import { MinistryTribeService } from '../../core/services/ministry-tribe.service
             <button class="secondary" type="button" [disabled]="!memberToAdd" (click)="addExpectedMember(session)">Ajouter à la liste</button>
           </div>
           <div class="roster">
-            <div class="roster-head"><span>Participant</span><span>État</span><span>Pointage</span></div>
+            <div class="roster-head"><span>Participant</span><span>État</span><span>Heure</span><span>Méthode</span><span>Actions</span></div>
             <div class="roster-row" *ngFor="let participant of participants">
               <span class="person"><span class="avatar">{{ initials(participant) }}</span><span><strong>{{ participant.first_name }} {{ participant.last_name }}</strong><small>{{ participant.is_visitor ? 'Visiteur' : 'Membre' }}</small></span></span>
               <span><span class="record-status" *ngIf="participant.attendance" [attr.data-status]="participant.attendance.status">{{ attendanceLabel(participant.attendance.status) }}</span><span class="muted" *ngIf="!participant.attendance">Non pointé</span></span>
-              <button class="check-in" type="button" *ngIf="session.status === 'IN_PROGRESS' && !session.event_occurrence && !participant.attendance && participant.expected_for_absence" [disabled]="!canListCheckIn(session)" (click)="checkIn(session, participant)">Pointer</button>
-              <span class="muted" *ngIf="participant.attendance">{{ participant.attendance.checked_in_at ? (participant.attendance.checked_in_at | date:'HH:mm:ss') : '—' }}</span>
-              <span class="muted" *ngIf="!participant.expected_for_absence">Inscription annulée</span>
-              <button class="remove-expected" type="button" *ngIf="session.status === 'PLANNED' && participant.expected_for_absence && participant.member_id && !session.event_occurrence" (click)="removeExpected(session, participant)">Retirer</button>
-              <div class="participant-actions" *ngIf="participant.attendance && !session.event_occurrence">
-                <button type="button" *ngIf="participant.attendance.status === 'ABSENT'" (click)="submitExcuse(participant)">Soumettre une justification</button>
-                <ng-container *ngFor="let excuse of participant.attendance.excuses">
+              <span class="muted">{{ participant.attendance?.checked_in_at ? (participant.attendance!.checked_in_at | date:'HH:mm:ss') : '—' }}</span>
+              <span class="muted">{{ participant.attendance?.method || '—' }}</span>
+              <div class="participant-actions">
+                <button type="button" *ngIf="session.status === 'IN_PROGRESS' && !session.event_occurrence && !participant.attendance && participant.expected_for_absence" [disabled]="!canListCheckIn(session)" (click)="checkIn(session, participant)">Pointer</button>
+                <button type="button" *ngIf="participant.attendance?.status === 'ABSENT'" (click)="submitExcuse(participant)">Soumettre une justification</button>
+                <ng-container *ngFor="let excuse of participant.attendance?.excuses ?? []">
                   <span class="excuse-state" *ngIf="excuse.status !== 'PENDING'">{{ excuse.status === 'APPROVED' ? 'Justification approuvée' : 'Justification refusée' }}</span>
                   <button type="button" *ngIf="excuse.status === 'PENDING'" (click)="decideExcuse(excuse.id, true)">Valider</button>
                   <button type="button" *ngIf="excuse.status === 'PENDING'" (click)="decideExcuse(excuse.id, false)">Refuser</button>
                 </ng-container>
-                <button type="button" *ngIf="participant.attendance.status === 'PRESENT' || participant.attendance.status === 'LATE'" (click)="earlyDeparture(participant)">Départ anticipé</button>
+                <button type="button" *ngIf="(participant.attendance?.status === 'PRESENT' || participant.attendance?.status === 'LATE')" (click)="earlyDeparture(participant)">Départ anticipé</button>
                 <button type="button" (click)="correctAttendance(participant)">Corriger</button>
               </div>
               <button class="history-button" type="button" *ngIf="participant.member_id" (click)="loadMemberHistory(participant)">Historique</button>
@@ -127,7 +174,7 @@ import { MinistryTribeService } from '../../core/services/ministry-tribe.service
           </div>
           <p class="hint" *ngIf="session.event_occurrence">Cette séance est liée à une occurrence Événements ; le pointage événementiel reste sa source canonique.</p>
         </section>
-        <section class="session-detail blank" *ngIf="!selectedSession"><div><span class="blank-mark">✓</span><h2>Choisissez une séance</h2><p>Le détail, les participants attendus et le pointage s’afficheront ici.</p></div></section>
+        <section class="participant-panel blank" *ngIf="!selectedSession"><div><span class="blank-mark">✓</span><h2>Choisissez une séance</h2><p>Le détail, les participants attendus et le pointage s’afficheront ici.</p></div></section>
       </div>
       </ng-container>
 
@@ -174,6 +221,16 @@ export class AttendanceComponent implements OnInit {
   memberToAdd = '';
   showCreate = false;
   showTypeForm = false;
+
+  /* ---- Session dense table state ---- */
+  openMenuId: string | null = null;
+  menuPosition = { top: 0, left: 0 };
+  sessionSortField: 'title' | 'type' | 'location' | 'starts_at' | 'status' = 'starts_at';
+  sessionSortDirection: 'asc' | 'desc' = 'desc';
+  selectedSessionIds = new Set<string>();
+  sessionPageIndex = 0;
+  readonly sessionPageSize = 10;
+
   loading = false;
   saving = false;
   errorMessage = '';
@@ -531,10 +588,29 @@ export class AttendanceComponent implements OnInit {
   }
 
   transition(session: AttendanceSession, action: 'open' | 'close' | 'cancel'): void {
+    this.openMenuId = null;
     if (action === 'cancel' && !confirm('Annuler cette séance ? Elle ne sera pas comptée comme une absence.')) return;
     this.attendance.transition(session.id, action).subscribe({
       next: (updated) => {
         this.successMessage = action === 'close' ? 'La séance est clôturée et les absences ont été calculées.' : `Séance ${this.statusLabel(updated.status).toLowerCase()}.`;
+        this.refreshSelected(updated);
+      },
+      error: (error) => this.showError(error),
+    });
+  }
+
+  viewSessionDetails(session: AttendanceSession): void {
+    this.openMenuId = null;
+    this.selectSession(session);
+  }
+
+  archiveSession(session: AttendanceSession): void {
+    this.openMenuId = null;
+    if (!confirm(`Archiver la séance « ${session.title} » ?`)) return;
+    const reason = prompt('Motif de l\'archivage (facultatif) :') ?? '';
+    this.attendance.transition(session.id, 'cancel', reason).subscribe({
+      next: (updated) => {
+        this.successMessage = 'La séance a été archivée.';
         this.refreshSelected(updated);
       },
       error: (error) => this.showError(error),
@@ -654,6 +730,71 @@ export class AttendanceComponent implements OnInit {
     this.selectedSession = session;
     this.loadSessions();
     this.selectSession(session);
+  }
+
+  /* ---- Session dense table getters ---- */
+  get filteredSessions(): AttendanceSession[] {
+    const direction = this.sessionSortDirection === 'asc' ? 1 : -1;
+    return [...this.sessions].sort((a, b) => this.sessionSortValue(a).localeCompare(this.sessionSortValue(b), 'fr', { sensitivity: 'base' }) * direction);
+  }
+  get pagedSessions(): AttendanceSession[] {
+    const start = this.sessionPageIndex * this.sessionPageSize;
+    return this.filteredSessions.slice(start, start + this.sessionPageSize);
+  }
+  get sessionPageCount(): number { return Math.max(1, Math.ceil(this.filteredSessions.length / this.sessionPageSize)); }
+  get sessionRangeStart(): number { return this.filteredSessions.length ? this.sessionPageIndex * this.sessionPageSize + 1 : 0; }
+  get sessionRangeEnd(): number { return Math.min((this.sessionPageIndex + 1) * this.sessionPageSize, this.filteredSessions.length); }
+  get visibleSessionPages(): number[] { return Array.from({ length: Math.min(this.sessionPageCount, 5) }, (_, index) => index); }
+  get allSessionsVisibleSelected(): boolean { return this.pagedSessions.length > 0 && this.pagedSessions.every((session) => this.selectedSessionIds.has(session.id)); }
+  private sessionSortValue(session: AttendanceSession): string {
+    switch (this.sessionSortField) {
+      case 'type': return session.session_type_name ?? '';
+      case 'location': return session.church_name ?? session.campus_name ?? '';
+      case 'starts_at': return session.starts_at;
+      case 'status': return this.statusLabel(session.status);
+      default: return session.title ?? '';
+    }
+  }
+  toggleSessionSelection(id: string, event: Event): void {
+    if ((event.target as HTMLInputElement).checked) this.selectedSessionIds.add(id); else this.selectedSessionIds.delete(id);
+  }
+  toggleVisibleSessionSelection(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const ids = this.pagedSessions.map((session) => session.id);
+    this.selectedSessionIds = new Set([...this.selectedSessionIds].filter((id) => !ids.includes(id)));
+    if (checked) ids.forEach((id) => this.selectedSessionIds.add(id));
+  }
+  sortBySession(field: 'title' | 'type' | 'location' | 'starts_at' | 'status'): void {
+    if (this.sessionSortField === field) this.sessionSortDirection = this.sessionSortDirection === 'asc' ? 'desc' : 'asc';
+    else { this.sessionSortField = field; this.sessionSortDirection = 'asc'; }
+    this.sessionPageIndex = 0;
+  }
+  changeSessionPage(delta: number): void { this.sessionPageIndex = Math.max(0, Math.min(this.sessionPageCount - 1, this.sessionPageIndex + delta)); }
+  goToSessionPage(page: number): void { this.sessionPageIndex = Math.max(0, Math.min(this.sessionPageCount - 1, page)); }
+  resetSessionFilters(): void { this.statusFilter = ''; this.sessionPageIndex = 0; this.loadSessions(); }
+  trackBySessionId(_index: number, session: AttendanceSession): string { return session.id; }
+  toggleMenu(id: string, event: Event): void {
+    event.stopPropagation();
+    if (this.openMenuId === id) { this.openMenuId = null; return; }
+    const trigger = event.currentTarget as HTMLElement;
+    const rect = trigger.getBoundingClientRect();
+    const width = 232;
+    const estimatedHeight = 200;
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const top = rect.bottom + 6 + estimatedHeight > window.innerHeight
+      ? Math.max(8, rect.top - estimatedHeight - 6)
+      : rect.bottom + 6;
+    this.menuPosition = { top, left };
+    this.openMenuId = id;
+  }
+  @HostListener('window:scroll')
+  closeMenuOnScroll(): void { this.openMenuId = null; }
+  @HostListener('window:resize')
+  closeMenuOnResize(): void { this.openMenuId = null; }
+  @HostListener('document:click', ['$event'])
+  closeMenuOnDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.context-wrap')) this.openMenuId = null;
   }
 
   private showError(error: { error?: { detail?: string; [key: string]: unknown } }): void {

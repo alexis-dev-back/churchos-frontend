@@ -1,34 +1,169 @@
 <section class="dashboard-page">
-  <header class="dashboard-heading">
-    <div><p class="eyebrow">VUE D’ENSEMBLE</p><h1>Tableau de bord</h1><p>Un aperçu des données disponibles dans votre espace.</p></div>
-    <a routerLink="/admin/churches">Gérer les églises</a>
+  <header class="page-header">
+    <div class="page-heading">
+      <p class="eyebrow">Tableau de bord</p>
+      <h1>Vue d'ensemble</h1>
+      <p>Suivi de l'activité de votre organisation.</p>
+    </div>
+    <div class="header-actions">
+      <span class="date-chip">{{ todayLabel }}</span>
+      <a routerLink="/members" class="btn btn-primary btn-sm">+ Nouveau membre</a>
+    </div>
   </header>
 
   <p *ngIf="errorMessage" class="message error" role="alert">{{ errorMessage }}</p>
   <p *ngIf="loading" class="message">Chargement des données du tenant…</p>
 
   <ng-container *ngIf="overview as data">
-    <div class="stats-grid">
-      <article class="stat-card members"><span class="stat-icon">M</span><div><span class="stat-label">Membres</span><strong class="stat-value">{{ data.members.length }}</strong><span class="stat-meta">Profils rattachés</span></div></article>
-      <article class="stat-card people"><span class="stat-icon">P</span><div><span class="stat-label">Personnes</span><strong class="stat-value">{{ data.people.length }}</strong><span class="stat-meta">Fiches de personnes</span></div></article>
-      <article class="stat-card families"><span class="stat-icon">F</span><div><span class="stat-label">Familles</span><strong class="stat-value">{{ data.families.length }}</strong><span class="stat-meta">Foyers enregistrés</span></div></article>
-      <article class="stat-card sites"><span class="stat-icon">É</span><div><span class="stat-label">Églises</span><strong class="stat-value">{{ data.churches.length }}</strong><span class="stat-meta">{{ data.campuses.length }} campus</span></div></article>
+    <div class="kpi-strip">
+      <article class="kpi" *ngFor="let kpi of kpis" [attr.data-tone]="kpi.tone">
+        <div class="kpi-label"><span class="kpi-dot"></span>{{ kpi.label }}</div>
+        <strong class="kpi-value">{{ kpi.value }}</strong>
+        <span class="kpi-note">{{ kpi.note }}</span>
+      </article>
     </div>
 
-    <div class="overview-grid">
-      <section class="panel">
-        <header class="panel-heading"><div><h2>Membres récents</h2><p>Les cinq derniers profils renvoyés par l’API.</p></div><a routerLink="/members">Tous les membres</a></header>
-        <div class="member-row" *ngFor="let member of data.members.slice(0, 5)"><span class="avatar">{{ member.first_name.slice(0, 1) }}{{ member.last_name.slice(0, 1) }}</span><div><strong>{{ member.first_name }} {{ member.last_name }}</strong><small>{{ member.email }}</small></div><span class="status" [attr.data-status]="member.status">{{ member.status || 'Inconnu' }}</span></div>
-        <p class="empty" *ngIf="!data.members.length">Aucun membre n’est encore enregistré.</p>
-      </section>
+    <section class="module-kpis" aria-labelledby="module-kpis-title">
+      <header class="module-kpis-heading">
+        <div><h2 id="module-kpis-title">Indicateurs des modules</h2><p>Activité récente et éléments à suivre</p></div>
+      </header>
+      <div class="module-kpi-grid">
+        <a class="module-kpi" *ngFor="let kpi of moduleKpis" [attr.data-tone]="kpi.tone" [routerLink]="kpi.path">
+          <span class="module-kpi-label">{{ kpi.label }}</span>
+          <strong>{{ kpi.value }}</strong>
+          <span class="module-kpi-note">{{ kpi.note }}</span>
+          <span class="module-kpi-link">Consulter le module <span aria-hidden="true">→</span></span>
+        </a>
+      </div>
+    </section>
 
-      <section class="panel directory-panel">
-        <header class="panel-heading"><div><h2>Répertoires</h2><p>Accès direct aux opérations disponibles.</p></div></header>
-        <a routerLink="/people"><span class="shortcut-mark">P</span><span><strong>Personnes</strong><small>Créer, modifier ou convertir en membre</small></span><span class="arrow">›</span></a>
-        <a routerLink="/families"><span class="shortcut-mark">F</span><span><strong>Familles</strong><small>Gérer les foyers et leurs liens</small></span><span class="arrow">›</span></a>
-        <a routerLink="/members"><span class="shortcut-mark">M</span><span><strong>Membres</strong><small>Profils, statut et invitations</small></span><span class="arrow">›</span></a>
-        <a routerLink="/admin/churches"><span class="shortcut-mark">É</span><span><strong>Sites</strong><small>Églises et campus du tenant</small></span><span class="arrow">›</span></a>
-      </section>
+    <div class="dashboard-grid">
+      <div class="dashboard-main">
+        <div class="analytics-row">
+          <section class="panel chart-panel">
+            <header class="panel-header">
+              <div><h2>Croissance de l'assemblée</h2><p>Membres ajoutés sur les 6 derniers mois</p></div>
+              <span class="legend"><i></i>Membres</span>
+            </header>
+            <div class="panel-body">
+              <div class="bar-chart">
+                <div class="bar-col" *ngFor="let point of monthlySeries">
+                  <span class="bar-value">{{ point.value }}</span>
+                  <div class="bar-track"><div class="bar-fill" [style.height.%]="point.height"></div></div>
+                  <span class="bar-label">{{ point.label }}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="panel donut-panel">
+            <header class="panel-header">
+              <div><h2>Répartition des membres</h2><p>Par statut</p></div>
+            </header>
+            <div class="panel-body donut-body">
+              <div class="donut" [style.background]="donutGradient">
+                <div class="donut-hole"><strong>{{ data.members.length }}</strong><span>membres</span></div>
+              </div>
+              <ul class="donut-legend">
+                <li *ngFor="let item of statusBreakdown">
+                  <span class="dot" [style.background]="item.color"></span>
+                  <span class="legend-label">{{ item.label }}</span>
+                  <strong>{{ item.value }}</strong>
+                  <small>{{ item.percent }}%</small>
+                </li>
+              </ul>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel members-panel">
+          <header class="panel-header">
+            <div><h2>Membres récents</h2><p>Derniers profils ajoutés</p></div>
+            <a routerLink="/members" class="btn btn-ghost btn-sm">Tous les membres →</a>
+          </header>
+          <div class="table-wrap">
+            <table class="data-table">
+              <thead>
+                <tr><th>Membre</th><th>Église</th><th>Statut</th><th>Depuis</th><th></th></tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let member of recentMembers">
+                  <td>
+                    <div class="member-cell">
+                      <span class="member-avatar">{{ initials(member) }}</span>
+                      <div><strong>{{ member.first_name }} {{ member.last_name }}</strong><small>{{ member.email }}</small></div>
+                    </div>
+                  </td>
+                  <td>{{ churchName(member) }}</td>
+                  <td><span class="status" [attr.data-status]="member.status">{{ statusLabel(member.status) }}</span></td>
+                  <td>{{ formatDate(member.created_at) }}</td>
+                  <td><a routerLink="/members" class="row-link">Voir</a></td>
+                </tr>
+                <tr *ngIf="!recentMembers.length"><td colspan="5" class="empty">Aucun membre enregistré pour le moment.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <aside class="dashboard-rail">
+        <section class="panel">
+          <header class="panel-header"><div><h2>Aperçu rapide</h2><p>Votre organisation</p></div></header>
+          <div class="panel-body rail-list">
+            <div class="rail-row">
+              <span class="rail-icon green">M</span>
+              <div><strong>{{ data.members.length }}</strong><small>Membres</small></div>
+              <span class="rail-badge">{{ activeMembers }} actifs</span>
+            </div>
+            <div class="rail-row">
+              <span class="rail-icon blue">P</span>
+              <div><strong>{{ data.people.length }}</strong><small>Personnes</small></div>
+              <span class="rail-badge">{{ data.families.length }} familles</span>
+            </div>
+            <div class="rail-row">
+              <span class="rail-icon orange">F</span>
+              <div><strong>{{ familyWithMembers }}</strong><small>Familles actives</small></div>
+              <span class="rail-badge">{{ data.churches.length }} églises</span>
+            </div>
+            <div class="rail-row">
+              <span class="rail-icon green">É</span>
+              <div><strong>{{ data.churches.length }}</strong><small>Églises</small></div>
+              <span class="rail-badge">{{ data.campuses.length }} campus</span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <header class="panel-header">
+            <div><h2>Églises</h2><p>Répartition des membres</p></div>
+            <a routerLink="/admin/churches" class="btn btn-ghost btn-sm">Gérer</a>
+          </header>
+          <div class="panel-body church-list">
+            <div class="church-row" *ngFor="let church of churchBreakdown">
+              <div class="church-meta"><strong>{{ church.name }}</strong><small>{{ church.count }} membres</small></div>
+              <div class="progress"><span [style.width.%]="church.percent"></span></div>
+            </div>
+            <p *ngIf="!churchBreakdown.length" class="empty">Aucune église enregistrée.</p>
+          </div>
+        </section>
+
+        <section class="verse-card">
+          <span class="verse-mark">“</span>
+          <h3>« Honore l'Éternel avec tes biens »</h3>
+          <p>Proverbes 3:9 — Que chaque don soit un acte de foi et de gratitude.</p>
+          <small>Encouragement du jour</small>
+        </section>
+
+        <section class="panel">
+          <header class="panel-header"><div><h2>Actions rapides</h2></div></header>
+          <div class="panel-body quick-actions">
+            <a routerLink="/members" class="quick-action"><span class="quick-mark green">+</span><div><strong>Ajouter un membre</strong><small>Créer un nouveau profil</small></div></a>
+            <a routerLink="/families" class="quick-action"><span class="quick-mark orange">F</span><div><strong>Nouvelle famille</strong><small>Enregistrer un foyer</small></div></a>
+            <a routerLink="/finance" class="quick-action"><span class="quick-mark blue">$</span><div><strong>Enregistrer un don</strong><small>Mettre à jour les finances</small></div></a>
+            <a routerLink="/events" class="quick-action"><span class="quick-mark green">É</span><div><strong>Planifier un événement</strong><small>Ajouter au calendrier</small></div></a>
+          </div>
+        </section>
+      </aside>
     </div>
   </ng-container>
 </section>

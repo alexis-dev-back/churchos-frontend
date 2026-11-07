@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit } from '@angular/core';
+import { Component, HostListener, OnInit } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Family, FamilyCreateRequest, FamilyMemberRecord, FamilyMemberRequest } from '../../../core/models/family';
 import { Person } from '../../../core/models/person';
@@ -8,7 +8,7 @@ import { Member } from '../../../core/models/member';
 import { FamilyService } from '../../../core/services/family.service';
 import { PersonService } from '../../../core/services/person.service';
 import { MemberService } from '../../../core/services/member.service';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-family-list',
@@ -18,50 +18,86 @@ import { Router, RouterLink } from '@angular/router';
     <section class="page">
       <div class="family-workspace">
         <div class="family-main">
-      <nav class="family-breadcrumb"><a routerLink="/dashboard">Accueil</a><span>›</span><strong>Familles</strong></nav>
-      <header class="family-heading">
-        <div class="family-title"><span class="family-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7-1a3.5 3.5 0 1 0-2.6-5.8 5.5 5.5 0 0 1 0 7.6c.7.1 1.8.1 2.6.1ZM9 13c-4 0-7 2-7 4.5V21h14v-3.5C16 15 13 13 9 13Zm7.5.3c1.6.9 2.5 2.2 2.5 4V21h3v-3.5c0-2.2-2.2-3.8-5.5-4.2Z"/></svg></span><div><h1>Familles</h1><p>Gérez les familles de votre église et suivez leur parcours spirituel.</p></div></div>
-        <div class="family-heading-actions"><button class="primary" type="button" (click)="openCreate()">＋ Ajouter une famille</button><button class="outline-action" type="button" disabled title="Import bientôt disponible">⇧ Importer</button><button class="outline-action icon-action" type="button" aria-label="Actualiser" (click)="loadFamilies()">···</button></div>
-      </header>
-      <p *ngIf="errorMessage" class="notice error" role="alert">{{ errorMessage }}</p><p *ngIf="successMessage" class="notice success" role="status">{{ successMessage }}</p>
+          <nav class="family-breadcrumb"><a routerLink="/dashboard">Accueil</a><span>›</span><strong>Familles</strong></nav>
+          <header class="family-heading">
+            <div class="family-title"><span class="family-title-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm7-1a3.5 3.5 0 1 0-2.6-5.8 5.5 5.5 0 0 1 0 7.6c.7.1 1.8.1 2.6.1ZM9 13c-4 0-7 2-7 4.5V21h14v-3.5C16 15 13 13 9 13Zm7.5.3c1.6.9 2.5 2.2 2.5 4V21h3v-3.5c0-2.2-2.2-3.8-5.5-4.2Z"/></svg></span><div><h1>Familles</h1><p>Gérez les familles de votre église et suivez leur parcours spirituel.</p></div></div>
+            <div class="family-heading-actions"><button class="primary" type="button" (click)="openCreate()">＋ Ajouter une famille</button><button class="outline-action" type="button" disabled title="Import bientôt disponible">⇧ Importer</button><button class="outline-action icon-action" type="button" aria-label="Actualiser" (click)="loadFamilies()">···</button></div>
+          </header>
+          <p *ngIf="errorMessage" class="notice error" role="alert">{{ errorMessage }}</p><p *ngIf="successMessage" class="notice success" role="status">{{ successMessage }}</p>
 
-      <div class="modal-backdrop" *ngIf="formOpen" (click)="closeForm()"><form class="editor modal" [formGroup]="form" (ngSubmit)="save()" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="family-form-title">
-        <div class="editor-heading"><h2 id="family-form-title">{{ editingId ? 'Modifier la famille' : 'Créer une famille' }}</h2><button type="button" aria-label="Fermer" (click)="closeForm()">×</button></div>
-        <div class="form-grid"><label>Nom de la famille *<input formControlName="name" /></label><label>Téléphone<input formControlName="phone" /></label><label>Email<input type="email" formControlName="email" /></label><label>Quartier<input formControlName="neighborhood" /></label><label>Ministère<input formControlName="ministry" /></label><label>Statut<select formControlName="status"><option value="ACTIVE">Active</option><option value="FOLLOW_UP">En suivi</option><option value="INACTIVE">Inactive</option><option value="ARCHIVED">Archivée</option></select></label><label class="wide">Adresse<textarea formControlName="address"></textarea></label><label class="wide">Notes<textarea formControlName="notes"></textarea></label></div>
-        <div class="actions"><button class="primary" type="submit" [disabled]="form.invalid || saving">{{ saving ? 'Enregistrement…' : editingId ? 'Enregistrer' : 'Créer' }}</button><button class="quiet" type="button" (click)="closeForm()">Annuler</button></div>
-      </form></div>
+          <div class="modal-backdrop" *ngIf="formOpen" (click)="closeForm()"><form class="editor modal" [formGroup]="form" (ngSubmit)="save()" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-labelledby="family-form-title">
+            <div class="editor-heading"><h2 id="family-form-title">{{ editingId ? 'Modifier la famille' : 'Créer une famille' }}</h2><button type="button" aria-label="Fermer" (click)="closeForm()">×</button></div>
+            <div class="form-grid"><label>Nom de la famille *<input formControlName="name" /></label><label>Téléphone<input formControlName="phone" /></label><label>Email<input type="email" formControlName="email" /></label><label>Quartier<input formControlName="neighborhood" /></label><label>Ministère<input formControlName="ministry" /></label><label>Statut<select formControlName="status"><option value="ACTIVE">Active</option><option value="FOLLOW_UP">En suivi</option><option value="INACTIVE">Inactive</option><option value="ARCHIVED">Archivée</option></select></label><label class="wide">Adresse<textarea formControlName="address"></textarea></label><label class="wide">Notes<textarea formControlName="notes"></textarea></label></div>
+            <div class="actions"><button class="primary" type="submit" [disabled]="form.invalid || saving">{{ saving ? 'Enregistrement…' : editingId ? 'Enregistrer' : 'Créer' }}</button><button class="quiet" type="button" (click)="closeForm()">Annuler</button></div>
+          </form></div>
 
-      <div class="family-stats">
-        <article><span class="stat-icon blue">♟</span><div><span>Total des familles</span><strong>{{ families.length }}</strong><small>Familles enregistrées</small></div></article>
-        <article><span class="stat-icon green">♟</span><div><span>Familles actives</span><strong>{{ activeFamilyCount }}</strong><small>Statut actif</small></div></article>
-        <article><span class="stat-icon purple">♙</span><div><span>Nouvelles familles</span><strong>{{ newFamilyCount }}</strong><small>Enregistrées ce mois</small></div></article>
-        <article><span class="stat-icon orange">◉</span><div><span>Familles en suivi pastoral</span><strong>{{ followUpFamilyCount }}</strong><small>À accompagner</small></div></article>
-      </div>
-        <section class="families family-table">
-          <div class="filters">
-            <label class="search">⌕ <input aria-label="Rechercher une famille" placeholder="Rechercher une famille..." [value]="searchTerm" (input)="setSearch($event)" /></label>
-            <select aria-label="Filtrer par statut" [value]="statusFilter" (change)="setStatus($event)"><option value="">Tous les statuts</option><option value="ACTIVE">Actives</option><option value="FOLLOW_UP">En suivi</option><option value="INACTIVE">Inactives</option><option value="ARCHIVED">Archivées</option></select>
-            <select aria-label="Filtrer par ministère" [value]="ministryFilter" (change)="setMinistry($event)"><option value="">Tous les ministères</option><option *ngFor="let ministry of ministries" [value]="ministry">{{ ministry }}</option></select>
-            <select aria-label="Filtrer par quartier" [value]="neighborhoodFilter" (change)="setNeighborhood($event)"><option value="">Tous les quartiers</option><option *ngFor="let neighborhood of neighborhoods" [value]="neighborhood">{{ neighborhood }}</option></select>
-            <button type="button" class="filter-button" (click)="resetFilters()">☷ Filtres</button>
+          <div class="family-stats">
+            <article><span class="stat-icon blue">♟</span><div><span>Total des familles</span><strong>{{ families.length }}</strong><small>Familles enregistrées</small></div></article>
+            <article><span class="stat-icon green">♟</span><div><span>Familles actives</span><strong>{{ activeFamilyCount }}</strong><small>Statut actif</small></div></article>
+            <article><span class="stat-icon purple">♙</span><div><span>Nouvelles familles</span><strong>{{ newFamilyCount }}</strong><small>Enregistrées ce mois</small></div></article>
+            <article><span class="stat-icon orange">◉</span><div><span>Familles en suivi pastoral</span><strong>{{ followUpFamilyCount }}</strong><small>À accompagner</small></div></article>
           </div>
-          <div class="table-wrap"><table><thead><tr><th><input type="checkbox" aria-label="Sélectionner toutes les familles visibles" [checked]="allVisibleSelected" (change)="toggleVisibleFamilies($event)" /></th><th>Nom de la famille</th><th>Chef de famille</th><th>Téléphone</th><th>Quartier</th><th>Statut</th><th>Actions</th></tr></thead><tbody>
-            <tr *ngFor="let family of pagedFamilies; trackBy: trackById" (click)="selectFamily(family)" [class.selected-row]="activeFamily?.id === family.id">
-              <td><input type="checkbox" [attr.aria-label]="'Sélectionner ' + family.name" [checked]="selectedFamilyIds.has(family.id)" (click)="$event.stopPropagation()" (change)="toggleFamilySelection(family.id, $event)" /></td>
-              <td><button type="button" class="family-link" (click)="$event.stopPropagation(); selectFamily(family)"><span class="family-avatars"><span class="family-avatar">{{ initials(family.primary_contact_name) }}</span><span class="family-avatar second" *ngIf="(family.member_count || 0) > 1">{{ family.member_count }}</span></span><span><strong>{{ family.name }}</strong><small>{{ family.member_count || 0 }} membre(s)</small></span></button></td>
-              <td>{{ family.primary_contact_name || 'Non renseigné' }}</td><td>{{ family.primary_contact_phone || family.phone || '—' }}</td><td>{{ family.neighborhood || '—' }}</td>
-              <td><span class="status-pill" [attr.data-status]="family.status">{{ statusLabel(family.status) }}</span></td>
-              <td><div class="context-wrap"><button type="button" class="context-trigger" aria-label="Actions famille" (click)="toggleMenu(family.id, $event)">···</button><div class="context-menu" *ngIf="openMenuId === family.id"><button type="button" (click)="viewDetails(family)">Voir détail</button><button type="button" (click)="edit(family)">Modifier</button><button type="button" (click)="openAddMember(family)">Ajouter un membre / une personne</button></div></div></td>
-            </tr>
-            <tr *ngFor="let placeholder of placeholderRows" class="placeholder-row" aria-hidden="true"><td colspan="7"></td></tr>
-            <tr *ngIf="!pagedFamilies.length"><td colspan="7" class="empty">{{ loading ? 'Chargement…' : 'Aucune famille ne correspond à votre recherche.' }}</td></tr>
-          </tbody></table></div>
-          <div class="pagination" *ngIf="filteredFamilies.length"><span>Affichage de {{ rangeStart }} à {{ rangeEnd }} sur {{ filteredFamilies.length }} familles</span><div><button type="button" aria-label="Page précédente" [disabled]="pageIndex === 0" (click)="changePage(-1)">‹</button><button *ngFor="let page of visiblePages" type="button" [class.current-page]="page === pageIndex" (click)="goToPage(page)">{{ page + 1 }}</button><span class="page-ellipsis" *ngIf="pageCount > 5">…</span><button *ngIf="pageCount > 5" type="button" [class.current-page]="pageIndex === pageCount - 1" (click)="goToPage(pageCount - 1)">{{ pageCount }}</button><button type="button" aria-label="Page suivante" [disabled]="pageIndex + 1 >= pageCount" (click)="changePage(1)">›</button></div></div>
-        </section>
+
+          <section class="families family-table">
+            <div class="filters">
+              <label class="search">⌕ <input aria-label="Rechercher une famille" placeholder="Rechercher une famille..." [value]="searchTerm" (input)="setSearch($event)" /></label>
+              <select aria-label="Filtrer par statut" [value]="statusFilter" (change)="setStatus($event)"><option value="">Tous les statuts</option><option value="ACTIVE">Actives</option><option value="FOLLOW_UP">En suivi</option><option value="INACTIVE">Inactives</option><option value="ARCHIVED">Archivées</option></select>
+              <select aria-label="Filtrer par ministère" [value]="ministryFilter" (change)="setMinistry($event)"><option value="">Tous les ministères</option><option *ngFor="let ministry of ministries" [value]="ministry">{{ ministry }}</option></select>
+              <select aria-label="Filtrer par quartier" [value]="neighborhoodFilter" (change)="setNeighborhood($event)"><option value="">Tous les quartiers</option><option *ngFor="let neighborhood of neighborhoods" [value]="neighborhood">{{ neighborhood }}</option></select>
+              <button type="button" class="filter-button" (click)="resetFilters()">☷ Filtres</button>
+            </div>
+            <div class="table-wrap" (scroll)="closeMenuOnScroll()">
+              <table aria-label="Liste des familles">
+                <thead>
+                  <tr>
+                    <th class="check-column"><input type="checkbox" aria-label="Sélectionner toutes les familles visibles" [checked]="allVisibleSelected" (change)="toggleVisibleFamilies($event)" /></th>
+                    <th class="number-column">N°</th>
+                    <th class="sortable" (click)="sortBy('name')"><span>Famille</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'name' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'name' && sortDirection === 'desc'">⌄</i></span></th>
+                    <th class="sortable" (click)="sortBy('primary_contact_name')"><span>Responsable</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'primary_contact_name' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'primary_contact_name' && sortDirection === 'desc'">⌄</i></span></th>
+                    <th class="sortable" (click)="sortBy('phone')"><span>Téléphone</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'phone' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'phone' && sortDirection === 'desc'">⌄</i></span></th>
+                    <th>Email</th>
+                    <th class="sortable" (click)="sortBy('neighborhood')"><span>Quartier</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'neighborhood' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'neighborhood' && sortDirection === 'desc'">⌄</i></span></th>
+                    <th class="sortable" (click)="sortBy('ministry')"><span>Ministère</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'ministry' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'ministry' && sortDirection === 'desc'">⌄</i></span></th>
+                    <th class="sortable" (click)="sortBy('status')"><span>Statut</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="sortField === 'status' && sortDirection === 'asc'">⌃</i><i [class.active]="sortField === 'status' && sortDirection === 'desc'">⌄</i></span></th>
+                    <th class="actions-column">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let family of pagedFamilies; let i = index; trackBy: trackById" (click)="viewDetails(family)">
+                    <td class="check-column"><input type="checkbox" [attr.aria-label]="'Sélectionner ' + family.name" [checked]="selectedFamilyIds.has(family.id)" (click)="$event.stopPropagation()" (change)="toggleFamilySelection(family.id, $event)" /></td>
+                    <td class="number-column"><span class="family-number">#{{ rangeStart + i }}</span></td>
+                    <td><div class="family-name-cell"><strong [title]="family.name">{{ family.name }}</strong><span class="family-member-count">{{ memberCountLabel(family.member_count) }}</span></div></td>
+                    <td>{{ family.primary_contact_name || '—' }}</td>
+                    <td>{{ family.primary_contact_phone || family.phone || '—' }}</td>
+                    <td><a class="family-contact-link" [attr.href]="family.email ? 'mailto:' + family.email : null" (click)="$event.stopPropagation()">{{ family.email || '—' }}</a></td>
+                    <td>{{ family.neighborhood || '—' }}</td>
+                    <td>{{ family.ministry || '—' }}</td>
+                    <td><span class="family-status" [attr.data-status]="family.status">{{ statusLabel(family.status) }}</span></td>
+                    <td class="actions-column">
+                      <div class="context-wrap">
+                        <button type="button" class="context-trigger" aria-label="Actions famille" (click)="toggleMenu(family.id, $event)"><span></span><span></span><span></span></button>
+                        <div class="context-menu" *ngIf="openMenuId === family.id" [style.top.px]="menuPosition.top" [style.left.px]="menuPosition.left" (click)="$event.stopPropagation()">
+                          <button type="button" (click)="viewDetails(family)">Voir la fiche complète</button>
+                          <button type="button" (click)="edit(family)">Modifier</button>
+                          <button type="button" (click)="openAddMember(family)">Ajouter un membre / une personne</button>
+                          <button type="button" *ngIf="family.primary_contact_phone || family.phone" (click)="copyToClipboard(family.primary_contact_phone || family.phone, 'téléphone')">Copier le téléphone</button>
+                          <button type="button" *ngIf="family.email" (click)="copyToClipboard(family.email, 'email')">Copier l’email</button>
+                          <button type="button" class="danger" (click)="deleteFamily(family)">Supprimer la famille</button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr *ngIf="!pagedFamilies.length"><td colspan="10" class="empty">{{ loading ? 'Chargement…' : 'Aucune famille ne correspond à votre recherche.' }}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <footer class="family-table-footer"><span>Affichage de {{ rangeStart }} à {{ rangeEnd }} sur {{ filteredFamilies.length }} familles</span><div class="family-pagination"><button type="button" aria-label="Page précédente" [disabled]="pageIndex === 0" (click)="changePage(-1)">‹</button><button *ngFor="let page of visiblePages" type="button" [class.current-page]="page === pageIndex" (click)="goToPage(page)">{{ page + 1 }}</button><span class="page-ellipsis" *ngIf="pageCount > 5">…</span><button *ngIf="pageCount > 5" type="button" [class.current-page]="pageIndex === pageCount - 1" (click)="goToPage(pageCount - 1)">{{ pageCount }}</button><button type="button" aria-label="Page suivante" [disabled]="pageIndex + 1 >= pageCount" (click)="changePage(1)">›</button></div></footer>
+          </section>
         </div>
         <aside class="family-panel" *ngIf="activeFamily">
           <div class="family-cover"><span class="status-pill" [attr.data-status]="activeFamily.status">{{ statusLabel(activeFamily.status) }}</span><button type="button" aria-label="Actions de la famille" (click)="toggleMenu(activeFamily.id, $event)">···</button></div>
-          <div class="family-summary"><div class="family-portrait-stack"><span class="family-portrait" *ngFor="let person of familyPortraits">{{ initials(person.member_name || person.person_name) }}</span><span class="family-portrait" *ngIf="!familyMembers.length">{{ initials(activeFamily.primary_contact_name) }}</span></div><div><h2>{{ activeFamily.name }}</h2><span class="member-count">♟ {{ activeFamily.member_count || 0 }} membre(s)</span><p>Une famille unie, une bénédiction pour l’église.</p></div></div>
+          <div class="family-summary"><div class="family-portrait-stack"><span class="family-portrait" *ngFor="let person of familyPortraits">{{ initials(person.member_name || person.person_name) }}</span><span class="family-portrait" *ngIf="!familyMembers.length">{{ initials(activeFamily.primary_contact_name) }}</span></div><div><h2>{{ activeFamily.name }}</h2><span class="member-count">♟ {{ activeFamily.member_count || 0 }} membre(s)</span><p>Aperçu rapide de la famille</p></div></div>
+          <button type="button" class="outline-action" (click)="viewDetails(activeFamily)">Ouvrir la fiche complète</button>
           <nav class="panel-tabs"><button *ngFor="let tab of panelTabs" type="button" [class.active]="activePanelTab === tab" (click)="activePanelTab = tab">{{ tab }}</button></nav>
           <div class="panel-content" *ngIf="activePanelTab === 'Informations'">
             <h3>Informations générales</h3>
@@ -95,7 +131,7 @@ import { Router, RouterLink } from '@angular/router';
     </section>
   `,
   styles: [`
-    :host{display:block;color:#202b34}.page{max-width:1440px;margin:0 auto}.heading,.editor-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.heading{margin-bottom:20px}.eyebrow{margin:0 0 7px;color:#157c72;font-size:.72rem;font-weight:800}.heading h1{margin:0;font-size:1.8rem}.heading p:not(.eyebrow){margin:5px 0 0;color:#69757a}.primary,.quiet{min-height:37px;padding:8px 12px;border:1px solid #166d65;background:#166d65;color:white;font-weight:700;cursor:pointer}.quiet{border-color:#d4dfdc;background:white;color:#29423e}.primary:disabled{opacity:.55}.editor,.membership,.families{margin-bottom:18px;border:1px solid #e2e8e7;background:white;padding:18px}.editor-heading h2{margin:0;font-size:1rem}.editor-heading p{margin:5px 0 0;color:#69757a;font-size:.84rem}.editor-heading>button{border:0;background:none;font-size:1.5rem;cursor:pointer}.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}.form-grid label{display:grid;gap:6px;color:#53615e;font-size:.8rem;font-weight:700}.form-grid input,.form-grid select,.form-grid textarea{width:100%;min-height:38px;padding:8px 10px;border:1px solid #cfd9d6;background:white;font:inherit}.form-grid textarea{min-height:68px}.wide{grid-column:1/-1}.check{display:flex!important;align-items:center;gap:8px!important}.check input{width:16px;height:16px;min-height:0}.actions{display:flex;gap:8px;flex-wrap:wrap}.empty{padding:18px 0;text-align:center;color:#69757a}.notice{padding:10px 12px;margin:0 0 14px;font-size:.87rem}.error{background:#fff1ef;color:#9b352a}.success{background:#e9f5ed;color:#23613a}
+    :host{display:block;color:#1B2A24}.page{max-width:1440px;margin:0 auto}.heading,.editor-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.heading{margin-bottom:20px}.eyebrow{margin:0 0 7px;color:#2A8768;font-size:.72rem;font-weight:800}.heading h1{margin:0;font-size:1.8rem}.heading p:not(.eyebrow){margin:5px 0 0;color:#7A8A84}.primary,.quiet{min-height:37px;padding:8px 12px;border:1px solid #2A8768;background:#2A8768;color:white;font-weight:700;cursor:pointer}.quiet{border-color:#E3EAE6;background:white;color:#2A3B35}.primary:disabled{opacity:.55}.editor,.membership,.families{margin-bottom:18px;border:1px solid #E3EAE6;background:white;padding:18px}.editor-heading h2{margin:0;font-size:1rem}.editor-heading p{margin:5px 0 0;color:#7A8A84;font-size:.84rem}.editor-heading>button{border:0;background:none;font-size:1.5rem;cursor:pointer}.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}.form-grid label{display:grid;gap:6px;color:#7A8A84;font-size:.8rem;font-weight:700}.form-grid input,.form-grid select,.form-grid textarea{width:100%;min-height:38px;padding:8px 10px;border:1px solid #E3EAE6;background:white;font:inherit}.form-grid textarea{min-height:68px}.wide{grid-column:1/-1}.check{display:flex!important;align-items:center;gap:8px!important}.check input{width:16px;height:16px;min-height:0}.actions{display:flex;gap:8px;flex-wrap:wrap}.empty{padding:18px 0;text-align:center;color:#7A8A84}.notice{padding:10px 12px;margin:0 0 14px;font-size:.87rem}.error{background:#fff1ef;color:#dc2626}.success{background:#f0fdf4;color:#23613a}
     `],
 })
 export class FamilyListComponent implements OnInit {
@@ -118,6 +154,9 @@ export class FamilyListComponent implements OnInit {
   readonly pageSize = 10;
   readonly selectedFamilyIds = new Set<string>();
   openMenuId: string | null = null;
+  menuPosition = { top: 0, left: 0 };
+  sortField: 'name' | 'primary_contact_name' | 'phone' | 'neighborhood' | 'ministry' | 'status' = 'name';
+  sortDirection: 'asc' | 'desc' = 'asc';
   loading = false;
   saving = false;
   errorMessage = '';
@@ -126,16 +165,17 @@ export class FamilyListComponent implements OnInit {
   get neighborhoods(): string[] { return [...new Set(this.families.map((family) => family.neighborhood).filter((value): value is string => !!value))].sort(); }
   get filteredFamilies(): Family[] {
     const query = this.searchTerm.trim().toLocaleLowerCase();
-    return this.families.filter((family) =>
+    const filtered = this.families.filter((family) =>
       (!this.statusFilter || family.status === this.statusFilter)
       && (!this.ministryFilter || family.ministry === this.ministryFilter)
       && (!this.neighborhoodFilter || family.neighborhood === this.neighborhoodFilter)
-      && (!query || [family.name, family.address, family.neighborhood, family.ministry, family.phone, family.email, family.primary_contact_name]
+      && (!query || [family.name, family.address, family.neighborhood, family.ministry, family.phone, family.email, family.primary_contact_name, family.primary_contact_phone]
         .some((value) => value?.toLocaleLowerCase().includes(query))),
     );
+    const direction = this.sortDirection === 'asc' ? 1 : -1;
+    return filtered.sort((a, b) => this.sortValue(a).localeCompare(this.sortValue(b), 'fr', { sensitivity: 'base' }) * direction);
   }
   get pagedFamilies(): Family[] { return this.filteredFamilies.slice(this.pageIndex * this.pageSize, (this.pageIndex + 1) * this.pageSize); }
-  get placeholderRows(): number[] { return this.pagedFamilies.length ? Array.from({ length: this.pageSize - this.pagedFamilies.length }, (_, index) => index) : []; }
   get pageCount(): number { return Math.max(1, Math.ceil(this.filteredFamilies.length / this.pageSize)); }
   get visiblePages(): number[] {
     const visiblePageCount = Math.min(this.pageCount, 5);
@@ -159,7 +199,7 @@ export class FamilyListComponent implements OnInit {
   form = this.fb.group({ name: ['', Validators.required], address: [''], neighborhood: [''], ministry: [''], phone: [''], email: ['', Validators.email], status: ['ACTIVE'], notes: [''] });
   memberForm = this.fb.group({ target_type: ['person' as 'person' | 'member'], person: [''], member: [''], relationship_type: ['OTHER' as FamilyMemberRequest['relationship_type'], Validators.required], is_primary_contact: [false] });
 
-  constructor(private fb: FormBuilder, private familyService: FamilyService, private personService: PersonService, private memberService: MemberService, private router: Router) {}
+  constructor(private fb: FormBuilder, private familyService: FamilyService, private personService: PersonService, private memberService: MemberService, private router: Router, private route: ActivatedRoute) {}
 
   ngOnInit(): void {
     this.loading = true; this.loadFamilies();
@@ -169,7 +209,29 @@ export class FamilyListComponent implements OnInit {
   openCreate(): void { this.resetForm(); this.formOpen = true; }
   closeForm(): void { this.formOpen = false; this.resetForm(); }
   edit(family: Family): void { this.openMenuId = null; this.editingId = family.id; this.formOpen = true; this.form.patchValue(family); }
-  toggleMenu(id: string, event: Event): void { event.stopPropagation(); this.openMenuId = this.openMenuId === id ? null : id; }
+  toggleMenu(id: string, event: Event): void {
+    event.stopPropagation();
+    if (this.openMenuId === id) { this.openMenuId = null; return; }
+    const trigger = event.currentTarget as HTMLElement;
+    const rect = trigger.getBoundingClientRect();
+    const width = 232;
+    const estimatedHeight = 260;
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const top = rect.bottom + 6 + estimatedHeight > window.innerHeight
+      ? Math.max(8, rect.top - estimatedHeight - 6)
+      : rect.bottom + 6;
+    this.menuPosition = { top, left };
+    this.openMenuId = id;
+  }
+  @HostListener('window:scroll')
+  closeMenuOnScroll(): void { this.openMenuId = null; }
+  @HostListener('window:resize')
+  closeMenuOnResize(): void { this.openMenuId = null; }
+  @HostListener('document:click', ['$event'])
+  closeMenuOnDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.context-wrap')) this.openMenuId = null;
+  }
   viewDetails(family: Family): void { this.openMenuId = null; this.router.navigate(['/families', family.id]); }
   selectFamily(family: Family): void {
     this.activeFamily = family;
@@ -186,6 +248,21 @@ export class FamilyListComponent implements OnInit {
   setMinistry(event: Event): void { this.ministryFilter = (event.target as HTMLSelectElement).value; this.pageIndex = 0; }
   setNeighborhood(event: Event): void { this.neighborhoodFilter = (event.target as HTMLSelectElement).value; this.pageIndex = 0; }
   resetFilters(): void { this.searchTerm = ''; this.statusFilter = ''; this.ministryFilter = ''; this.neighborhoodFilter = ''; this.pageIndex = 0; }
+  sortBy(field: 'name' | 'primary_contact_name' | 'phone' | 'neighborhood' | 'ministry' | 'status'): void {
+    if (this.sortField === field) this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+    else { this.sortField = field; this.sortDirection = 'asc'; }
+    this.pageIndex = 0;
+  }
+  private sortValue(family: Family): string {
+    switch (this.sortField) {
+      case 'primary_contact_name': return family.primary_contact_name ?? '';
+      case 'phone': return family.primary_contact_phone ?? family.phone ?? '';
+      case 'neighborhood': return family.neighborhood ?? '';
+      case 'ministry': return family.ministry ?? '';
+      case 'status': return this.statusLabel(family.status);
+      default: return family.name ?? '';
+    }
+  }
   toggleFamilySelection(id: string, event: Event): void {
     if ((event.target as HTMLInputElement).checked) this.selectedFamilyIds.add(id);
     else this.selectedFamilyIds.delete(id);
@@ -206,6 +283,10 @@ export class FamilyListComponent implements OnInit {
     if (status === 'ARCHIVED') return 'Archivée';
     return 'Non définie';
   }
+  memberCountLabel(count?: number): string {
+    const total = count || 0;
+    return `${total} membre${total > 1 ? 's' : ''}`;
+  }
   initials(name?: string | null): string {
     if (!name?.trim()) return '?';
     return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toLocaleUpperCase();
@@ -217,6 +298,40 @@ export class FamilyListComponent implements OnInit {
     return labels[type];
   }
 
+  copyToClipboard(value: string | null | undefined, label: 'email' | 'téléphone'): void {
+    this.openMenuId = null;
+    if (!value) { this.errorMessage = `Aucun ${label} renseigné.`; return; }
+    const success = () => {
+      this.errorMessage = '';
+      this.successMessage = `${label === 'email' ? 'Email' : 'Téléphone'} copié.`;
+    };
+    const failure = () => {
+      this.successMessage = '';
+      this.errorMessage = `Impossible de copier ${label === 'email' ? 'l’email' : 'le téléphone'}.`;
+    };
+    if (!navigator.clipboard) {
+      this.copyWithFallback(value, success, failure);
+      return;
+    }
+    navigator.clipboard.writeText(value).then(success).catch(() => this.copyWithFallback(value, success, failure));
+  }
+
+  private copyWithFallback(value: string, success: () => void, failure: () => void): void {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      if (document.execCommand('copy')) success(); else failure();
+    } catch {
+      failure();
+    } finally {
+      document.body.removeChild(textarea);
+    }
+  }
+
   save(): void {
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const payload = this.form.getRawValue() as FamilyCreateRequest;
@@ -226,6 +341,7 @@ export class FamilyListComponent implements OnInit {
   }
 
   deleteFamily(family: Family): void {
+    this.openMenuId = null;
     if (!window.confirm(`Supprimer « ${family.name} » et les rattachements de ses membres ?`)) return;
     this.familyService.deleteFamily(family.id).subscribe({
       next: () => {
@@ -263,7 +379,28 @@ export class FamilyListComponent implements OnInit {
   }
 
   trackById(_index: number, family: Family): string { return family.id; }
-  loadFamilies(): void { this.loading = true; this.familyService.listFamilies().subscribe({ next: (items) => { this.families = items; this.loading = false; const selected = items.find((family) => family.id === this.activeFamily?.id) ?? items.find((family) => (family.member_count || 0) > 0) ?? items[0] ?? null; if (selected) this.selectFamily(selected); else { this.activeFamily = null; this.familyMembers = []; } }, error: (error) => { this.errorMessage = this.describeError(error); this.loading = false; } }); }
+  loadFamilies(): void {
+    this.loading = true;
+    this.familyService.listFamilies().subscribe({
+      next: (items) => {
+        this.families = items;
+        this.loading = false;
+        const selected = items.find((family) => family.id === this.activeFamily?.id) ?? items.find((family) => (family.member_count || 0) > 0) ?? items[0] ?? null;
+        if (selected) this.selectFamily(selected);
+        else { this.activeFamily = null; this.familyMembers = []; }
+
+        const editId = this.route.snapshot.queryParamMap.get('edit');
+        const addMemberId = this.route.snapshot.queryParamMap.get('addMember');
+        const requestedFamily = items.find((family) => family.id === (editId ?? addMemberId));
+        if (requestedFamily) {
+          if (editId) this.edit(requestedFamily);
+          else if (addMemberId) this.openAddMember(requestedFamily);
+          this.router.navigate([], { relativeTo: this.route, queryParams: { edit: null, addMember: null }, queryParamsHandling: 'merge', replaceUrl: true });
+        }
+      },
+      error: (error) => { this.errorMessage = this.describeError(error); this.loading = false; },
+    });
+  }
   private resetForm(): void { this.editingId = null; this.form.reset({ name: '', address: '', neighborhood: '', ministry: '', phone: '', email: '', status: 'ACTIVE', notes: '' }); }
   private clearMessages(): void { this.errorMessage = ''; this.successMessage = ''; }
   private describeError(error: unknown): string { if (error instanceof HttpErrorResponse) { const body = error.error as Record<string, unknown> | string | null; if (typeof body === 'string') return body; if (body && typeof body === 'object') { const detail = body['detail']; if (typeof detail === 'string') return detail; return Object.entries(body).map(([key, value]) => `${key} : ${Array.isArray(value) ? value.join(', ') : value}`).join(' · '); } return `Erreur API (${error.status}).`; } return 'Une erreur inattendue est survenue.'; }

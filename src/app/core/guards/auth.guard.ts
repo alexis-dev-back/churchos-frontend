@@ -12,11 +12,11 @@ export const authGuard: CanActivateFn = (route, state) => {
   if (!auth.isAuthenticated()) return router.createUrlTree(['/login'], { queryParams: { returnUrl: state.url } });
   return auth.me().pipe(
     switchMap((user) => {
-      const isMemberProfile = route.routeConfig?.path === 'profile';
+      const isPersonalSpace = ['profile', 'tasks'].includes(route.routeConfig?.path ?? '');
       if (user.is_superuser) return of(route.routeConfig?.path === 'admin' ? true : router.createUrlTree(['/admin']));
       if (user.active_organization) {
         const activeRole = user.organizations.find((organization) => organization.tenant_id === user.active_organization?.tenant_id)?.role;
-        if (activeRole === 'owner' || activeRole === 'admin' || isMemberProfile) return of(true);
+        if (activeRole === 'owner' || activeRole === 'admin' || isPersonalSpace) return of(true);
         return configuration.getAccess().pipe(
           map((access) => access.permission_codes.length > 0 ? true : router.createUrlTree(['/profile'])),
         );
@@ -25,7 +25,7 @@ export const authGuard: CanActivateFn = (route, state) => {
       if (organizations.length === 1) {
         const role = organizations[0].role;
         return auth.selectOrganization({ tenant_id: organizations[0].tenant_id }).pipe(
-          switchMap(() => role === 'owner' || role === 'admin' || isMemberProfile
+          switchMap(() => role === 'owner' || role === 'admin' || isPersonalSpace
             ? of(true)
             : configuration.getAccess().pipe(
               map((access) => access.permission_codes.length > 0 ? true : router.createUrlTree(['/profile'])),
@@ -109,13 +109,14 @@ function firstAllowedModule(permissionCodes: string[]): string {
     ['finance.', '/finance'],
     ['ecodim.', '/ecodim'],
     ['attendance.', '/attendance'],
+    ['pastoral.', '/pastoral'],
     ['events.', '/events'],
     ['members.', '/members'],
     ['people.', '/people'],
     ['families.', '/families'],
     ['ministries.', '/ministries'],
   ];
-  return modules.find(([prefix]) => permissionCodes.some((code) => code.startsWith(prefix)))?.[1] ?? '/profile';
+  return modules.find(([prefix]) => permissionCodes.some((code) => code.startsWith(prefix)))?.[1] ?? '/tasks';
 }
 
 export const tenantAdminGuard: CanActivateFn = () => {

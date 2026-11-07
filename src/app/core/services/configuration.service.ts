@@ -18,8 +18,8 @@ export class ConfigurationService {
 
   constructor(private http: HttpClient) {}
 
-  getAccess(): Observable<{ permission_codes: string[] }> {
-    return this.http.get<{ permission_codes: string[] }>(`${this.apiUrl}/access/`);
+  getAccess(): Observable<{ permission_codes: string[]; is_organization_admin: boolean }> {
+    return this.http.get<{ permission_codes: string[]; is_organization_admin: boolean }>(`${this.apiUrl}/access/`);
   }
 
   getChurchSettings(churchId: string): Observable<ChurchSettings> {
@@ -71,6 +71,13 @@ export class ConfigurationService {
 
   updateUser(membershipId: number, payload: Partial<ConfigurationMembership>): Observable<ConfigurationMembership> {
     return this.http.patch<ConfigurationMembership>(`${this.apiUrl}/users/${membershipId}/`, payload);
+  }
+
+  resetUserPassword(membershipId: number, password: string): Observable<{ detail: string }> {
+    return this.http.post<{ detail: string }>(
+      `${this.apiUrl}/users/${membershipId}/reset-password/`,
+      { password },
+    );
   }
 
   listAssignments(membershipId?: number): Observable<ConfigurationPage<ConfigurationAssignment>> {

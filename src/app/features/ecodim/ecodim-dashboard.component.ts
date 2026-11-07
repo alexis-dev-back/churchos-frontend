@@ -136,7 +136,7 @@ export class EcodimDashboardComponent implements OnInit {
     if (!total) {
       return '#edf2ef';
     }
-    const colors = ['#2879ef', '#20b685', '#7a56df', '#f28b27', '#e879a9', '#b3bfba'];
+    const colors = ['#2A8768', '#20b685', '#7a56df', '#f28b27', '#e879a9', '#b3bfba'];
     let offset = 0;
     const segments = counts.map((count, index) => {
       const start = offset;

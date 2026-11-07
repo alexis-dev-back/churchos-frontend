@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Person, PersonCreateRequest, PersonMembershipRequest } from '../models/person';
+import { InvitingMember, Person, PersonCreateRequest, PersonMembershipRequest } from '../models/person';
 
 @Injectable({ providedIn: 'root' })
 export class PersonService {
@@ -12,6 +12,10 @@ export class PersonService {
 
   listPersons(): Observable<Person[]> {
     return this.http.get<Person[]>(`${this.apiUrl}/people/`);
+  }
+
+  listInviterMembers(): Observable<InvitingMember[]> {
+    return this.http.get<InvitingMember[]>(`${this.apiUrl}/people/inviter-members/`);
   }
 
   createPerson(payload: PersonCreateRequest): Observable<Person | { detail: string; duplicates: Person[] }> {

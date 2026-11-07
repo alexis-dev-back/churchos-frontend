@@ -15,7 +15,7 @@ import { AuthService } from '../../../core/services/auth.service';
     </form></section>
   `,
   styles: [`
-    :host{display:block}.auth{min-height:calc(100vh - 82px);display:grid;place-items:center;background:#eff5f2}.auth form{width:min(440px,100%);display:grid;gap:14px;padding:30px;background:white;border:1px solid #dce4e2}.eyebrow{margin:0;color:#157c72;font-size:.72rem;font-weight:800}.auth h1{margin:0;font-size:1.8rem}.intro{margin:0;color:#69757a;font-size:.9rem;line-height:1.5}.auth label{display:grid;gap:6px;color:#53615e;font-size:.82rem;font-weight:700}.auth input{min-height:42px;padding:9px 11px;border:1px solid #cfd9d6;font:inherit}.auth button{min-height:44px;border:0;background:#166d65;color:white;font-weight:700;cursor:pointer}.auth button:disabled{opacity:.55}.auth a{color:#16665f;font-size:.85rem}.error{margin:0;color:#a33434;font-size:.85rem}
+    :host{display:block}.auth{min-height:calc(100vh - 82px);display:grid;place-items:center;background:#EFF5F2}.auth form{width:min(440px,100%);display:grid;gap:14px;padding:30px;background:white;border:1px solid #E3EAE6}.eyebrow{margin:0;color:#2A8768;font-size:.72rem;font-weight:800}.auth h1{margin:0;font-size:1.8rem}.intro{margin:0;color:#7A8A84;font-size:.9rem;line-height:1.5}.auth label{display:grid;gap:6px;color:#7A8A84;font-size:.82rem;font-weight:700}.auth input{min-height:42px;padding:9px 11px;border:1px solid #E3EAE6;font:inherit}.auth button{min-height:44px;border:0;background:#2A8768;color:white;font-weight:700;cursor:pointer}.auth button:disabled{opacity:.55}.auth a{color:#2A8768;font-size:.85rem}.error{margin:0;color:#dc2626;font-size:.85rem}
   `],
 })
 export class RegisterComponent {

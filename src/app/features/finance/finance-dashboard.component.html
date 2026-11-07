@@ -1,9 +1,9 @@
-<main class="finance-page">
+<main class="finance-page finance-dashboard-page">
   <nav class="finance-breadcrumbs" aria-label="Fil d’Ariane">
     <a routerLink="/dashboard">Accueil</a><span>›</span><strong>Finances</strong>
   </nav>
 
-  <header class="finance-heading">
+  <header class="finance-heading finance-no-print">
     <div class="finance-heading-title">
       <span class="finance-title-icon" aria-hidden="true">▤</span>
       <div>
@@ -12,7 +12,6 @@
       </div>
     </div>
     <div class="finance-heading-filters">
-      <span class="finance-period-chip">◷ {{ openPeriod ? formatPeriod(openPeriod) : 'Aucune période ouverte' }}</span>
       <label class="finance-church-select" *ngIf="churches.length > 1">
         <span class="visually-hidden">Église active</span>
         <select [(ngModel)]="selectedChurchId" (ngModelChange)="onChurchChange()">
@@ -28,240 +27,192 @@
   <p class="finance-feedback" *ngIf="loading" role="status">Chargement de votre espace financier…</p>
 
   <ng-container *ngIf="!loading && selectedChurchId">
-    <div class="finance-layout">
-      <section class="finance-main">
-        <div class="finance-metrics">
-          <article class="finance-metric-card">
-            <span class="finance-metric-icon green">＋</span>
-            <span class="finance-metric-label">Total des dons</span>
-            <strong>{{ formatMoney(summary?.income_total) }}</strong>
-            <span class="finance-metric-note">Encaissements confirmés</span>
-          </article>
-          <article class="finance-metric-card">
-            <span class="finance-metric-icon blue">↗</span>
-            <span class="finance-metric-label">Total des dépenses</span>
-            <strong>{{ formatMoney(summary?.expense_total) }}</strong>
-            <span class="finance-metric-note">Paiements confirmés</span>
-          </article>
-          <article class="finance-metric-card">
-            <span class="finance-metric-icon purple">◈</span>
-            <span class="finance-metric-label">Solde disponible</span>
-            <strong>{{ formatMoney(summary?.available_balance) }}</strong>
-            <span class="finance-metric-note">{{ summary?.pending_transactions || 0 }} opération(s) en attente</span>
-          </article>
-          <article class="finance-metric-card">
-            <span class="finance-metric-icon orange">▣</span>
-            <span class="finance-metric-label">Gestion financière</span>
-            <strong class="finance-config-value">{{ configuration ? levelLabel(configuration.level) : 'À configurer' }}</strong>
-            <span class="finance-metric-note">{{ configuration ? 'Devise ' + configuration.base_currency + ' · version ' + configuration.version : 'Initialisez le module pour commencer.' }}</span>
-          </article>
-        </div>
 
-        <div class="finance-panels-row">
-          <section class="finance-panel finance-trend-panel">
-            <header class="finance-panel-heading">
-              <div><h2>Évolution des dons et dépenses</h2><p>Suivi mensuel des mouvements financiers</p></div>
-              <span class="finance-legend"><i class="donation-dot"></i>Dons <i class="expense-dot"></i>Dépenses</span>
-            </header>
-            <div class="finance-chart-placeholder">
-              <div class="finance-chart-scale"><span>{{ summary?.currency }}</span><span> </span><span> </span><span> </span><span>0</span></div>
-              <div class="finance-chart-area">
-                <div class="finance-chart-grid"></div>
-                <div class="finance-month-bars" *ngIf="summary?.monthly?.length; else noMonthlyData">
-                  <div class="finance-month-bar" *ngFor="let month of summary?.monthly">
-                    <div class="finance-bar-pair">
-                      <i class="income-bar" [style.height.%]="chartBarHeight(month.income)" [title]="'Dons ' + formatMoney(month.income)"></i>
-                      <i class="expense-bar" [style.height.%]="chartBarHeight(month.expenses)" [title]="'Dépenses ' + formatMoney(month.expenses)"></i>
-                    </div>
-                    <small>{{ month.month.slice(5) }}</small>
+    <!-- Action bar -->
+    <div class="dashboard-actions">
+      <button class="action-btn" type="button" [disabled]="!canRecordIncome || !configuration || !openPeriod" (click)="openOperationForm('offrande')">
+        <span class="action-icon" aria-hidden="true">◉</span>Enregistrer une Offrande
+      </button>
+      <button class="action-btn" type="button" [disabled]="!canRecordIncome || !configuration || !openPeriod" (click)="openOperationForm('dime')">
+        <span class="action-icon" aria-hidden="true">％</span>Enregistrer une Dîme
+      </button>
+      <button class="action-btn" type="button" [disabled]="!canRecordIncome || !configuration || !openPeriod" (click)="openOperationForm('don')">
+        <span class="action-icon" aria-hidden="true">♡</span>Enregistrer un don
+      </button>
+      <button class="action-btn" type="button" [disabled]="!canRecordIncome || !configuration || !openPeriod" (click)="openOperationForm('cotisation')">
+        <span class="action-icon" aria-hidden="true">◎</span>Enregistrer une cotisation (Moisson/Autre)
+      </button>
+      <button class="action-btn danger" type="button" [disabled]="!canRecordExpense || !configuration || !openPeriod" (click)="openOperationForm('expense')">
+        <span class="action-icon" aria-hidden="true">↗</span>Enregistrer une dépense / Sortie de Caisse
+      </button>
+    </div>
+
+    <!-- KPI cards -->
+    <div class="kpi-cards">
+      <article class="kpi-card offrande">
+        <span class="kpi-icon" aria-hidden="true">◉</span>
+        <div class="kpi-info">
+          <div class="kpi-label">Montant total des offrandes</div>
+          <div class="kpi-value">{{ formatMoney(totalOffrandes, summary?.currency) }}</div>
+          <div class="kpi-sub">{{ operationCount('offrande') }} opération(s)</div>
+        </div>
+      </article>
+      <article class="kpi-card dime">
+        <span class="kpi-icon" aria-hidden="true">％</span>
+        <div class="kpi-info">
+          <div class="kpi-label">Montant total des dîmes</div>
+          <div class="kpi-value">{{ formatMoney(totalDimes, summary?.currency) }}</div>
+          <div class="kpi-sub">{{ operationCount('dime') }} opération(s)</div>
+        </div>
+      </article>
+      <article class="kpi-card don">
+        <span class="kpi-icon" aria-hidden="true">♡</span>
+        <div class="kpi-info">
+          <div class="kpi-label">Montant total des dons</div>
+          <div class="kpi-value">{{ formatMoney(totalDons, summary?.currency) }}</div>
+          <div class="kpi-sub">{{ operationCount('don') }} opération(s)</div>
+        </div>
+      </article>
+      <article class="kpi-card cotisation">
+        <span class="kpi-icon" aria-hidden="true">◎</span>
+        <div class="kpi-info">
+          <div class="kpi-label">Montant total des cotisations</div>
+          <div class="kpi-value">{{ formatMoney(totalCotisations, summary?.currency) }}</div>
+          <div class="kpi-sub">{{ operationCount('cotisation') }} opération(s)</div>
+        </div>
+      </article>
+      <article class="kpi-card expense">
+        <span class="kpi-icon" aria-hidden="true">↗</span>
+        <div class="kpi-info">
+          <div class="kpi-label">Montant total des dépenses / sorties</div>
+          <div class="kpi-value">{{ formatMoney(totalDepenses, summary?.currency) }}</div>
+          <div class="kpi-sub">{{ operationCount('expense') }} opération(s)</div>
+        </div>
+      </article>
+    </div>
+
+    <!-- Period filter -->
+    <div class="period-filter">
+      <span>Période :</span>
+      <input type="date" [(ngModel)]="dashboardStartDate" />
+      <span>—</span>
+      <input type="date" [(ngModel)]="dashboardEndDate" />
+      <button class="filter-btn" type="button" (click)="applyDashboardFilter()">Filtrer par date</button>
+    </div>
+
+    <section class="finance-workflow" aria-labelledby="finance-workflow-title">
+      <header><div><h2 id="finance-workflow-title">Circuit de validation</h2><p>Chaque opération avance selon son type. Le demandeur ne valide jamais sa propre opération.</p></div></header>
+      <div class="finance-workflow-steps">
+        <article class="finance-workflow-step">
+          <h3><span>1</span> Recettes à confirmer <b>{{ incomeAwaitingVerification.length }}</b></h3>
+          <p>Un responsable habilité confirme l’encaissement avant l’inscription à la caisse.</p>
+          <div class="finance-workflow-item" *ngFor="let item of incomeAwaitingVerification">
+            <div><strong>{{ item.description || transactionOperationLabel(item) }}</strong><small>{{ formatMoney(item.amount, item.currency) }} · {{ item.transaction_date | date:'dd/MM/yyyy' }}</small></div>
+            <button type="button" *ngIf="canSettle" (click)="openPaymentForm(item)">Confirmer l’encaissement</button>
+          </div>
+          <small class="finance-workflow-empty" *ngIf="!incomeAwaitingVerification.length">Aucune recette en attente.</small>
+        </article>
+        <article class="finance-workflow-step">
+          <h3><span>2</span> Dépenses à approuver <b>{{ expensesAwaitingApproval.length }}</b></h3>
+          <p>Un approbateur examine la demande et peut l’approuver ou la rejeter avec un motif.</p>
+          <div class="finance-workflow-item" *ngFor="let item of expensesAwaitingApproval">
+            <div><strong>{{ item.description || 'Dépense' }}</strong><small>{{ formatMoney(item.amount, item.currency) }} · {{ item.transaction_date | date:'dd/MM/yyyy' }}</small></div>
+            <div class="finance-workflow-actions" *ngIf="canApprove"><button type="button" (click)="openApproval(item, 'approve')">Approuver</button><button type="button" class="reject" (click)="openApproval(item, 'reject')">Rejeter</button></div>
+          </div>
+          <small class="finance-workflow-empty" *ngIf="!expensesAwaitingApproval.length">Aucune dépense en attente.</small>
+        </article>
+        <article class="finance-workflow-step">
+          <h3><span>3</span> Paiements à initier <b>{{ approvedExpensesAwaitingPayment.length }}</b></h3>
+          <p>Après approbation, un trésorier peut engager le paiement total ou partiel.</p>
+          <div class="finance-workflow-item" *ngFor="let item of approvedExpensesAwaitingPayment">
+            <div><strong>{{ item.description || 'Dépense approuvée' }}</strong><small>Reste {{ formatMoney(item.remaining_amount, item.currency) }}</small></div>
+            <button type="button" *ngIf="canSettle" (click)="openPaymentForm(item)">Initier le paiement</button>
+          </div>
+          <small class="finance-workflow-empty" *ngIf="!approvedExpensesAwaitingPayment.length">Aucun paiement à initier.</small>
+        </article>
+        <article class="finance-workflow-step">
+          <h3><span>4</span> Exécutions à confirmer <b>{{ pendingPayments.length }}</b></h3>
+          <p>Une autre personne confirme l’exécution pour enregistrer le mouvement dans le compte.</p>
+          <div class="finance-workflow-item" *ngFor="let payment of pendingPayments">
+            <div><strong>{{ payment.transaction_description || 'Paiement' }}</strong><small>{{ formatMoney(payment.amount, payment.currency) }} · {{ payment.account_name }}</small></div>
+            <div class="finance-workflow-actions" *ngIf="canSettle"><button type="button" (click)="openPaymentDecision(payment, true)">Confirmer</button><button type="button" class="reject" (click)="openPaymentDecision(payment, false)">Rejeter</button></div>
+          </div>
+          <small class="finance-workflow-empty" *ngIf="!pendingPayments.length">Aucune exécution en attente.</small>
+        </article>
+      </div>
+    </section>
+
+    <!-- Tabs: one tab per distinct operation -->
+    <nav class="dashboard-tabs" aria-label="Filtrer les opérations">
+      <button *ngFor="let tab of operationTabs" class="tab-btn" type="button"
+        [class.active]="activeOperationTab === tab.key"
+        (click)="setOperationTab(tab.key)">{{ tab.label }}</button>
+    </nav>
+
+    <!-- Transaction history -->
+    <section class="transaction-history">
+      <h2>HISTORIQUE DES TRANSACTIONS</h2>
+      <div class="table-search">
+        <input type="text" [(ngModel)]="dashboardSearch" (ngModelChange)="onDashboardSearch()" placeholder="Rechercher par client, référence, catégorie ou description…" />
+        <button class="search-btn" type="button" aria-label="Rechercher">🔍</button>
+      </div>
+      <div class="table-wrap" (scroll)="closeDashboardMenuOnScroll()">
+        <table class="history-table" aria-label="Historique des transactions">
+          <thead>
+            <tr>
+              <th class="check-column"><input type="checkbox" aria-label="Sélectionner toutes les transactions" [checked]="allDashboardVisibleSelected" (change)="toggleVisibleDashboardSelection($event)" /></th>
+              <th class="number-column">N°</th>
+              <th class="sortable" (click)="sortByDashboard('client')"><span>Client</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="dashboardSortField === 'client' && dashboardSortDirection === 'asc'">⌃</i><i [class.active]="dashboardSortField === 'client' && dashboardSortDirection === 'desc'">⌄</i></span></th>
+              <th class="sortable" (click)="sortByDashboard('date')"><span>Date et heure</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="dashboardSortField === 'date' && dashboardSortDirection === 'asc'">⌃</i><i [class.active]="dashboardSortField === 'date' && dashboardSortDirection === 'desc'">⌄</i></span></th>
+              <th>Référence</th>
+              <th class="sortable" (click)="sortByDashboard('amount')"><span>Montant encaissé</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="dashboardSortField === 'amount' && dashboardSortDirection === 'asc'">⌃</i><i [class.active]="dashboardSortField === 'amount' && dashboardSortDirection === 'desc'">⌄</i></span></th>
+              <th>Mode d’encaissement</th>
+              <th>Type</th>
+              <th class="sortable" (click)="sortByDashboard('status')"><span>Statut</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="dashboardSortField === 'status' && dashboardSortDirection === 'asc'">⌃</i><i [class.active]="dashboardSortField === 'status' && dashboardSortDirection === 'desc'">⌄</i></span></th>
+              <th class="actions-column">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let t of dashboardPagedTransactions; let i = index; trackBy: trackByDashboardId" (click)="selectTransaction(t)">
+              <td class="check-column"><input type="checkbox" [attr.aria-label]="'Sélectionner ' + t.id" [checked]="selectedDashboardIds.has(t.id)" (click)="$event.stopPropagation()" (change)="toggleDashboardSelection(t.id, $event)" /></td>
+              <td class="number-column"><span class="dashboard-number">#{{ dashboardRangeStart + i }}</span></td>
+              <td>{{ t.member_name || t.counterparty_name || 'Client' }}</td>
+              <td>{{ t.transaction_date | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td>{{ t.reference || '—' }}</td>
+              <td>{{ formatMoney(t.amount, t.currency) }}</td>
+              <td>{{ paymentMethodLabel(t.payment_method) }}</td>
+              <td><span class="type-pill" [class.type-normal]="t.kind === 'INCOME'" [class.type-expense]="t.kind === 'EXPENSE'">{{ transactionOperationLabel(t) }}</span></td>
+              <td><span class="transaction-status" [attr.data-status]="t.status">{{ transactionStatusLabel(t.status) }}</span></td>
+              <td class="actions-column">
+                <div class="context-wrap">
+                  <button type="button" class="context-trigger" aria-label="Actions transaction" (click)="toggleDashboardMenu(t.id, $event)"><span></span><span></span><span></span></button>
+                  <div class="context-menu" *ngIf="openMenuId === t.id" [style.top.px]="menuPosition.top" [style.left.px]="menuPosition.left" (click)="$event.stopPropagation()">
+                    <button *ngIf="canValidateTransaction(t)" type="button" class="validate" (click)="validateTransaction(t)">✓ {{ t.kind === 'INCOME' ? 'Confirmer l’encaissement' : 'Approuver la dépense' }}</button>
+                    <button type="button" (click)="viewTransactionDetail(t)">Voir les détails</button>
+                    <button type="button" (click)="editTransaction(t)">Modifier</button>
+                    <button type="button" class="danger" (click)="deleteTransaction(t)">Supprimer</button>
                   </div>
                 </div>
-                <ng-template #noMonthlyData><p>Aucun paiement confirmé sur la période.</p></ng-template>
-              </div>
-            </div>
-          </section>
-
-          <section class="finance-panel finance-allocation-panel">
-            <header class="finance-panel-heading"><div><h2>Répartition des fonds</h2><p>Catégories de dons</p></div></header>
-            <div class="finance-category-shares" *ngIf="summary?.income_by_category?.length; else noIncomeCategories">
-              <div class="finance-category-row" *ngFor="let category of (summary?.income_by_category ?? []).slice(0, 5)">
-                <span class="finance-category-dot"></span><span>{{ category.category_name }}</span><strong>{{ categoryShare(category.amount) | number:'1.0-0' }}%</strong>
-                <div class="finance-category-track"><i [style.width.%]="categoryShare(category.amount)"></i></div>
-              </div>
-            </div>
-            <ng-template #noIncomeCategories><div class="finance-empty-chart"><span>—</span><p>Aucun don confirmé à répartir.</p></div></ng-template>
-          </section>
+              </td>
+            </tr>
+            <tr *ngIf="!dashboardPagedTransactions.length"><td colspan="10" class="history-empty">Aucune transaction trouvée.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <footer class="dashboard-table-footer">
+        <span>Affichage de {{ dashboardRangeStart }} à {{ dashboardRangeEnd }} sur {{ dashboardFilteredTransactions.length }} transaction(s)</span>
+        <div class="dashboard-pagination">
+          <button type="button" aria-label="Page précédente" [disabled]="dashboardPageIndex === 0" (click)="changeDashboardPage(-1)">‹</button>
+          <button *ngFor="let page of visibleDashboardPages" type="button" [class.current-page]="page === dashboardPageIndex" (click)="goToDashboardPage(page)">{{ page + 1 }}</button>
+          <span class="page-ellipsis" *ngIf="dashboardPageCount > 5">…</span>
+          <button *ngIf="dashboardPageCount > 5" type="button" [class.current-page]="dashboardPageIndex === dashboardPageCount - 1" (click)="goToDashboardPage(dashboardPageCount - 1)">{{ dashboardPageCount }}</button>
+          <button type="button" aria-label="Page suivante" [disabled]="dashboardPageIndex + 1 >= dashboardPageCount" (click)="changeDashboardPage(1)">›</button>
         </div>
-
-        <div class="finance-panels-row finance-data-row">
-          <section class="finance-panel">
-            <header class="finance-panel-heading">
-              <div><h2>Derniers dons</h2><p>Déclarés et confirmés</p></div>
-              <button class="finance-text-action" *ngIf="canRecordIncome && configuration" type="button" (click)="openTransactionForm('INCOME')">Enregistrer un don</button>
-            </header>
-            <div class="finance-transaction-list" *ngIf="recentDonations.length; else noDonations">
-              <article class="finance-transaction-row" *ngFor="let item of recentDonations">
-                <span class="finance-recent-icon">＋</span>
-                <div><strong>{{ item.category_name }}</strong><small>{{ item.member_name || item.counterparty_name || (item.is_anonymous ? 'Don anonyme' : item.description || 'Donateur non précisé') }} · {{ item.transaction_date | date:'d MMM y' }}</small></div>
-                <strong class="finance-amount-in">{{ formatMoney(item.amount, item.currency) }}</strong>
-                <button *ngIf="item.status === 'TO_VERIFY' && canSettle" class="finance-small-action" type="button" (click)="openPaymentForm(item)">Confirmer</button>
-                <span *ngIf="item.status !== 'TO_VERIFY'" class="finance-status" [class.closed]="item.status !== 'PAID'">{{ transactionStatusLabel(item.status) }}</span>
-              </article>
-            </div>
-            <ng-template #noDonations><div class="finance-empty-table compact"><p>Aucun don enregistré.</p></div></ng-template>
-          </section>
-
-          <section class="finance-panel finance-budget-panel">
-            <header class="finance-panel-heading">
-              <div><h2>Budgets par catégorie</h2><p>Engagé, payé et disponible</p></div>
-              <button class="finance-text-action" *ngIf="canManageBudget && configuration && openPeriod" type="button" (click)="openBudgetForm()">Créer</button>
-            </header>
-            <div class="finance-budget-list" *ngIf="budgets.length; else noBudgets">
-              <article class="finance-budget-row" *ngFor="let budget of budgets">
-                <div class="finance-budget-title"><strong>{{ budget.name }}</strong><small>{{ budget.category_name }} · {{ budget.currency }}</small></div>
-                <div class="finance-budget-values"><span>Budget {{ formatMoney(budget.allocated_amount, budget.currency) }}</span><span>Engagé {{ formatMoney(budget.committed_amount, budget.currency) }}</span></div>
-                <div class="finance-budget-track"><i [style.width.%]="budgetPercent(budget)"></i></div>
-                <button *ngIf="canManageBudget" class="finance-text-action" type="button" (click)="openBudgetRevision(budget)">Réviser</button>
-              </article>
-            </div>
-            <ng-template #noBudgets><div class="finance-empty-table compact"><p>Aucun budget créé pour cette période.</p></div></ng-template>
-          </section>
-        </div>
-
-        <div class="finance-panels-row finance-data-row">
-          <section class="finance-panel finance-periods-panel">
-            <header class="finance-panel-heading">
-              <div><h2>Périodes financières</h2><p>Exercices définis pour cette église</p></div>
-              <button *ngIf="canCreatePeriod && configuration && !configuration.is_suspended" class="finance-text-action" type="button" (click)="openPeriodForm()">Nouvelle période</button>
-            </header>
-            <div class="finance-period-list" *ngIf="periods.length; else noPeriods">
-              <article class="finance-period-row" *ngFor="let period of periods">
-                <span class="finance-period-mark">◷</span>
-                <div><strong>{{ period.name }}</strong><small>{{ formatPeriod(period) }}</small></div>
-                <span class="finance-status" [class.closed]="period.status === 'CLOSED'">{{ period.status === 'OPEN' ? 'Ouverte' : 'Clôturée' }}</span>
-                <button *ngIf="canCreatePeriod" class="finance-small-action" type="button" (click)="togglePeriod(period)">{{ period.status === 'OPEN' ? 'Clôturer' : 'Réouvrir' }}</button>
-              </article>
-            </div>
-            <ng-template #noPeriods>
-              <div class="finance-empty-table compact">
-                <p>Aucune période financière n’a été créée.</p>
-                <small *ngIf="!configuration">Configurez d’abord le module financier.</small>
-                <small *ngIf="configuration">Créez une période pour préparer les opérations.</small>
-              </div>
-            </ng-template>
-          </section>
-          <section class="finance-panel finance-level-panel">
-            <header class="finance-panel-heading"><div><h2>Niveau de gestion</h2><p>Configuration active</p></div></header>
-            <div class="finance-level-content" *ngIf="configuration; else setupFinance">
-              <span class="finance-level-icon">▤</span>
-              <div><strong>{{ levelLabel(configuration.level) }}</strong><span>Devise de base : {{ configuration.base_currency }}</span><span>Version {{ configuration.version }}</span></div>
-              <span class="finance-status" [class.closed]="configuration.is_suspended">{{ configuration.is_suspended ? 'Suspendue' : 'Active' }}</span>
-            </div>
-            <ng-template #setupFinance>
-              <div class="finance-empty-table compact"><p>Le niveau financier de cette église n’a pas encore été choisi.</p></div>
-            </ng-template>
-          </section>
-        </div>
-
-        <div class="finance-panels-row finance-data-row">
-          <section class="finance-panel">
-            <header class="finance-panel-heading">
-              <div><h2>Opérations à traiter</h2><p>Approbation, confirmation et paiement</p></div>
-              <span class="finance-pending-count">{{ pendingTransactions.length + pendingPayments.length }}</span>
-            </header>
-            <div class="finance-transaction-list" *ngIf="pendingTransactions.length; else noPendingTransactions">
-              <article class="finance-transaction-row" *ngFor="let item of pendingTransactions">
-                <span class="finance-recent-icon" [class.closed]="item.kind === 'EXPENSE'">↗</span>
-                <div><strong>{{ item.kind === 'INCOME' ? 'Don' : item.category_name }} · {{ item.description || item.counterparty_name || item.category_name }}</strong><small>{{ item.transaction_date | date:'d MMM y' }} · {{ formatMoney(item.amount, item.currency) }}</small></div>
-                <span class="finance-status">{{ transactionStatusLabel(item.status) }}</span>
-                <button *ngIf="item.status === 'PENDING_APPROVAL' && canApprove" class="finance-small-action" type="button" (click)="openApproval(item, 'approve')">Approuver</button>
-                <button *ngIf="item.status === 'PENDING_APPROVAL' && canApprove" class="finance-small-action danger" type="button" (click)="openApproval(item, 'reject')">Rejeter</button>
-                <button *ngIf="item.status === 'APPROVED' && canSettle" class="finance-small-action" type="button" (click)="openPaymentForm(item)">Payer</button>
-                <button *ngIf="item.kind === 'INCOME' && item.status === 'TO_VERIFY' && canSettle" class="finance-small-action" type="button" (click)="openPaymentForm(item)">Confirmer</button>
-              </article>
-            </div>
-            <ng-template #noPendingTransactions><p class="finance-aside-empty">Aucune opération en attente d’approbation ou de confirmation.</p></ng-template>
-            <div class="finance-transaction-list" *ngIf="pendingPayments.length">
-              <article class="finance-transaction-row" *ngFor="let payment of pendingPayments">
-                <span class="finance-recent-icon">◷</span>
-                <div><strong>Paiement en attente · {{ payment.transaction_description || payment.transaction_kind }}</strong><small>{{ payment.account_name }} · {{ formatMoney(payment.amount, payment.currency) }}</small></div>
-                <button *ngIf="canSettle" class="finance-small-action" type="button" (click)="openPaymentDecision(payment, true)">Confirmer exécution</button>
-                <button *ngIf="canSettle" class="finance-small-action danger" type="button" (click)="openPaymentDecision(payment, false)">Rejeter</button>
-              </article>
-            </div>
-          </section>
-          <section class="finance-panel">
-            <header class="finance-panel-heading">
-              <div><h2>Caisses et comptes</h2><p>Soldes suivis par support</p></div>
-              <button *ngIf="canSettle && configuration" class="finance-text-action" type="button" (click)="openAccountForm()">Ajouter un compte</button>
-            </header>
-            <article class="finance-period-row" *ngFor="let account of accounts">
-              <span class="finance-period-mark">{{ account.kind === 'CASH' ? '¤' : '▤' }}</span>
-              <div><strong>{{ account.name }}</strong><small>{{ account.kind }} · {{ account.currency }}</small></div>
-              <strong>{{ formatMoney(account.balance, account.currency) }}</strong>
-            </article>
-            <p class="finance-aside-empty" *ngIf="!accounts.length">Aucune caisse n’est configurée.</p>
-            <header class="finance-panel-heading finance-funds-heading">
-              <div><h2>Fonds affectés</h2><p>Finalités des dons et dépenses</p></div>
-              <button *ngIf="canConfigure && configuration" class="finance-text-action" type="button" (click)="openFundForm()">Ajouter</button>
-            </header>
-            <article class="finance-period-row" *ngFor="let fund of funds">
-              <span class="finance-period-mark">◇</span>
-              <div><strong>{{ fund.name }}</strong><small>{{ fund.is_restricted ? 'Fonds affecté' : 'Fonds non affecté' }}</small></div>
-            </article>
-            <p class="finance-aside-empty" *ngIf="!funds.length">Aucun fonds n’est défini.</p>
-          </section>
-        </div>
-      </section>
-
-      <aside class="finance-aside">
-        <section class="finance-verse-card">
-          <span class="verse-decoration" aria-hidden="true">✦</span>
-          <h2>Chaque don est une semence pour l’œuvre de Dieu</h2>
-          <p>« Que chacun donne comme il l’a décidé en son cœur, sans tristesse ni contrainte. »</p>
-          <small>2 Corinthiens 9:7</small>
-        </section>
-
-        <section class="finance-panel finance-actions-panel">
-          <header class="finance-panel-heading"><div><h2>Actions rapides</h2></div></header>
-          <div class="finance-quick-actions">
-            <button type="button" class="finance-quick-action income" [disabled]="!canRecordIncome || !configuration || !openPeriod" (click)="openTransactionForm('INCOME')">
-              <span class="finance-quick-icon">＋</span><strong>Enregistrer un don</strong><small>Déclarer une recette</small>
-            </button>
-            <button type="button" class="finance-quick-action expense" [disabled]="!canRecordExpense || !configuration || !openPeriod" (click)="openTransactionForm('EXPENSE')">
-              <span class="finance-quick-icon">↗</span><strong>Demander une dépense</strong><small>Soumettre à approbation</small>
-            </button>
-            <button type="button" class="finance-quick-action budget" [disabled]="!canManageBudget || !configuration || !openPeriod" (click)="openBudgetForm()">
-              <span class="finance-quick-icon">▣</span><strong>Créer un budget</strong><small>Planifier les dépenses</small>
-            </button>
-            <button type="button" class="finance-quick-action settings" *ngIf="canConfigure" (click)="openConfiguration()">
-              <span class="finance-quick-icon">⚙</span><strong>{{ configuration ? 'Configurer les finances' : 'Initialiser les finances' }}</strong><small>Paramètres et devise</small>
-            </button>
-            <button type="button" class="finance-quick-action period" *ngIf="canCreatePeriod && configuration && !configuration.is_suspended" (click)="openPeriodForm()">
-              <span class="finance-quick-icon">◷</span><strong>Créer une période</strong><small>Ouvrir un exercice</small>
-            </button>
-          </div>
-          <p class="finance-action-note">Les recettes sont confirmées par la trésorerie ; les dépenses suivent une approbation et un paiement séparés.</p>
-        </section>
-
-        <section class="finance-panel finance-recent-panel">
-          <header class="finance-panel-heading"><div><h2>Périodes récentes</h2></div></header>
-          <article class="finance-recent-row" *ngFor="let period of periods.slice(0, 4)">
-            <span class="finance-recent-icon" [class.closed]="period.status === 'CLOSED'">◷</span>
-            <div><strong>{{ period.name }}</strong><small>{{ formatPeriod(period) }}</small></div>
-            <span class="finance-recent-status">{{ period.status === 'OPEN' ? 'Ouverte' : 'Clôturée' }}</span>
-          </article>
-          <p class="finance-aside-empty" *ngIf="!periods.length">Les périodes financières apparaîtront ici.</p>
-        </section>
-
-        <section class="finance-scripture-card">
-          <span>Gérer avec sagesse,<br />c’est aussi servir Dieu.</span>
-          <small>Votre gestion, au service de la mission.</small>
-        </section>
-      </aside>
-    </div>
+      </footer>
+    </section>
   </ng-container>
 
+  <!-- Modals (unchanged) -->
   <div class="finance-modal-backdrop" *ngIf="modal" (click)="closeModal()" (keydown.escape)="closeModal()">
     <section class="finance-modal" role="dialog" aria-modal="true" aria-labelledby="finance-modal-title" (click)="$event.stopPropagation()">
       <header class="finance-modal-heading">
@@ -270,8 +221,7 @@
           <h2 id="finance-modal-title">
             {{ modal === 'configuration' ? (configuration ? 'Modifier la configuration' : 'Initialiser les finances') :
               modal === 'period' ? 'Créer une période' :
-              modal === 'income' ? 'Enregistrer un don' :
-              modal === 'expense' ? 'Demander une dépense' :
+              modal === 'income' || modal === 'expense' ? operationFormTitle :
               modal === 'payment' ? (selectedTransaction?.kind === 'INCOME' ? 'Confirmer l’encaissement' : 'Initier un paiement') :
               modal === 'approval' ? (approvalDecision === 'approve' ? 'Approuver la dépense' : 'Rejeter la dépense') :
               modal === 'pending-payment' ? (paymentDecisionConfirmed ? 'Confirmer l’exécution' : 'Rejeter le paiement') :
@@ -336,10 +286,21 @@
           <label>Date de l’opération *<input name="transactionDate" [(ngModel)]="transactionForm.transaction_date" type="date" required /></label>
           <label>Référence<input name="transactionReference" [(ngModel)]="transactionForm.reference" maxlength="80" /></label>
         </div>
+        <label>{{ modal === 'income' ? 'Mode d’encaissement' : 'Mode de paiement' }} *
+          <select name="transactionPaymentMethod" [(ngModel)]="transactionForm.payment_method" required>
+            <option value="CASH">Espèces</option>
+            <option value="BANK_TRANSFER">Virement</option>
+            <option value="MOBILE_MONEY">Mobile Money</option>
+            <option value="CHEQUE">Chèque</option>
+            <option value="ONLINE">Paiement en ligne</option>
+            <option value="CARD">Carte</option>
+            <option value="OTHER">Autre</option>
+          </select>
+        </label>
         <label *ngIf="transactionForm.currency.toUpperCase() !== configuration?.base_currency">Taux de change vers {{ configuration?.base_currency }} *
           <input name="transactionExchangeRate" [(ngModel)]="transactionForm.exchange_rate_to_base" type="number" min="0.000001" step="0.000001" required />
         </label>
-        <p class="finance-form-hint" *ngIf="modal === 'income'">Le don n’affectera le solde qu’après confirmation d’encaissement par une personne habilitée.</p>
+        <p class="finance-form-hint" *ngIf="modal === 'income'">L’opération n’affectera le solde qu’après confirmation d’encaissement par une personne habilitée.</p>
         <p class="finance-form-hint" *ngIf="modal === 'expense'">La dépense sera soumise à approbation avant l’initiation du paiement.</p>
         <div class="finance-form-actions"><button type="button" class="finance-secondary-button" [disabled]="saving" (click)="closeModal()">Annuler</button><button type="submit" class="finance-primary-button" [disabled]="saving || !transactionForm.amount || !transactionForm.description.trim()">{{ saving ? 'Enregistrement…' : 'Enregistrer' }}</button></div>
       </form>
@@ -418,4 +379,5 @@
       </form>
     </section>
   </div>
+
 </main>

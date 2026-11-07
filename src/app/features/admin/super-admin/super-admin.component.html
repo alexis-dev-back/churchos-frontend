@@ -1,0 +1,682 @@
+<div class="app">
+  <aside class="sidebar" [class.open]="sidebarOpen">
+    <div class="brand">
+      <div class="brand-mark">S</div>
+      <div>
+        <div class="brand-name">ChurchOS</div>
+        <div class="brand-sub">Console plateforme</div>
+      </div>
+    </div>
+    <nav class="nav">
+      <div class="nav-group">
+        <div class="nav-group-title">Vue d'ensemble</div>
+        <a class="nav-item" [class.active]="tab === 'dashboard'" (click)="setTab('dashboard')"><span class="nav-icon">⌂</span>Tableau de bord</a>
+        <a class="nav-item" [class.active]="tab === 'stats'" (click)="setTab('stats')"><span class="nav-icon">▤</span>Statistiques</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Gestion</div>
+        <a class="nav-item" [class.active]="tab === 'organizations'" (click)="setTab('organizations')"><span class="nav-icon">O</span>Organisations</a>
+        <a class="nav-item" [class.active]="tab === 'churches'" (click)="setTab('churches')"><span class="nav-icon">É</span>Églises</a>
+        <a class="nav-item" [class.active]="tab === 'users'" (click)="setTab('users')"><span class="nav-icon">U</span>Utilisateurs</a>
+        <a class="nav-item" [class.active]="tab === 'subscriptions'" (click)="setTab('subscriptions')"><span class="nav-icon">$</span>Abonnements</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Finances</div>
+        <a class="nav-item" [class.active]="tab === 'revenue'" (click)="setTab('revenue')"><span class="nav-icon">CA</span>Chiffre d'affaires</a>
+        <a class="nav-item" [class.active]="tab === 'billing'" (click)="setTab('billing')"><span class="nav-icon">F</span>Facturation</a>
+      </div>
+      <div class="nav-group">
+        <div class="nav-group-title">Plateforme</div>
+        <a class="nav-item" [class.active]="tab === 'settings'" (click)="setTab('settings')"><span class="nav-icon">⚙</span>Paramètres</a>
+        <a class="nav-item" [class.active]="tab === 'support'" (click)="setTab('support')"><span class="nav-icon">?</span>Support</a>
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="avatar">{{ initials }}</div>
+      <div class="footer-meta">
+        <strong>{{ currentUser?.username || 'Super Admin' }}</strong>
+        <small>Plateforme</small>
+      </div>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header class="topbar">
+      <div class="breadcrumb">
+        <button class="menu-btn" type="button" (click)="sidebarOpen = !sidebarOpen" aria-label="Menu">☰</button>
+        <span>ChurchOS</span>
+        <span class="sep">/</span>
+        <strong>{{ breadcrumb }}</strong>
+      </div>
+      <div class="topbar-actions">
+        <div class="search-box">
+          <input type="search" [(ngModel)]="globalQuery" placeholder="Rechercher organisation, église, utilisateur..." />
+        </div>
+        <button class="btn-icon" type="button" aria-label="Notifications">🔔</button>
+        <button class="user-chip" type="button" (click)="logout()" title="Se déconnecter">
+          <div class="avatar-mini">{{ initials }}</div>
+          <div class="meta">
+            <strong>{{ currentUser?.username || 'Super Admin' }}</strong>
+            <small>{{ currentUser?.email || 'superadmin@churchos.io' }}</small>
+          </div>
+        </button>
+      </div>
+    </header>
+
+    <main class="page">
+      <p class="notice error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p>
+      <p class="notice success" *ngIf="successMessage" role="status">{{ successMessage }}</p>
+
+      <section class="view" *ngIf="tab === 'dashboard'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">CONSOLE PLATEFORME</p>
+            <h1>Tableau de bord SaaS</h1>
+            <p>Vue d'ensemble de la plateforme ChurchOS</p>
+          </div>
+          <div class="actions">
+            <button class="btn btn-secondary btn-sm" type="button" (click)="reload()">Actualiser</button>
+            <button class="btn btn-primary btn-sm" type="button" (click)="openOrganization()">+ Nouvelle organisation</button>
+          </div>
+        </div>
+        <div class="kpi-strip">
+          <div class="kpi accent"><div class="label">Organisations</div><strong class="value">{{ stats?.organizations ?? organizations.length }}</strong><span class="sub">sur la plateforme</span></div>
+          <div class="kpi"><div class="label">Églises</div><strong class="value">{{ stats?.churches ?? churches.length }}</strong><span class="sub">tous tenants</span></div>
+          <div class="kpi"><div class="label">Utilisateurs</div><strong class="value">{{ stats?.users ?? users.length }}</strong><span class="sub">comptes actifs {{ stats?.users_active ?? users.length }}</span></div>
+          <div class="kpi success"><div class="label">MRR</div><strong class="value">{{ formatMoney(stats?.mrr) }}</strong><span class="sub">XAF</span></div>
+        </div>
+        <div class="kpi-strip">
+          <div class="kpi warning"><div class="label">Abonnements actifs</div><strong class="value">{{ stats?.subscriptions_active ?? 0 }}</strong><span class="sub">{{ stats?.subscriptions_trial ?? 0 }} en essai</span></div>
+          <div class="kpi danger"><div class="label">Suspendus</div><strong class="value">{{ stats?.subscriptions_suspended ?? 0 }}</strong><span class="sub">abonnements</span></div>
+          <div class="kpi purple"><div class="label">Membres totaux</div><strong class="value">{{ stats?.members ?? 0 }}</strong><span class="sub">Toutes orgs</span></div>
+          <div class="kpi"><div class="label">Revenu annuel (ARR)</div><strong class="value">{{ formatMoney(stats?.arr) }}</strong><span class="sub">XAF</span></div>
+        </div>
+        <div class="split">
+          <div class="panel">
+            <div class="panel-header"><div><h2>Revenus mensuels</h2><p>Évolution du MRR sur 6 mois</p></div></div>
+            <div class="panel-body">
+              <div class="chart-box">
+                <div class="chart-bar" *ngFor="let height of revenueBars; let i = index" [class.alt]="i % 2 === 1" [style.height.%]="height"></div>
+              </div>
+              <div class="chart-labels"><span *ngFor="let month of chartMonths">{{ month }}</span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><div><h2>Organisations récentes</h2></div></div>
+            <div class="panel-body">
+              <div class="recent-row" *ngFor="let org of recentOrganizations; let i = index">
+                <div class="avatar" [style.background]="avatarTone(i)">{{ initialsOf(org.name) }}</div>
+                <div class="recent-meta">
+                  <strong>{{ org.name }}</strong>
+                  <small>{{ churchCount(org) }} église(s) · {{ org.slug }}</small>
+                </div>
+                <span class="chip" [ngClass]="planChip(planLabel(org))">{{ planLabel(org) }}</span>
+              </div>
+              <p class="empty" *ngIf="!recentOrganizations.length">{{ loading ? 'Chargement…' : 'Aucune organisation.' }}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" *ngIf="tab === 'organizations'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">GESTION</p>
+            <h1>Organisations</h1>
+            <p>Gérez toutes les organisations clientes de la plateforme</p>
+          </div>
+          <div class="actions"><button class="btn btn-primary btn-sm" type="button" (click)="openOrganization()">+ Nouvelle organisation</button></div>
+        </div>
+        <div class="kpi-strip">
+          <div class="kpi"><div class="label">Total</div><strong class="value">{{ organizations.length }}</strong></div>
+          <div class="kpi success"><div class="label">Actives</div><strong class="value">{{ activeOrganizations }}</strong></div>
+          <div class="kpi warning"><div class="label">En essai</div><strong class="value">{{ trialOrganizations }}</strong></div>
+          <div class="kpi danger"><div class="label">Suspendues</div><strong class="value">{{ suspendedOrganizations }}</strong></div>
+        </div>
+        <div class="panel">
+          <div class="toolbar">
+            <div class="search-input"><input [(ngModel)]="orgQuery" placeholder="Rechercher une organisation..." /></div>
+            <select class="select" [(ngModel)]="orgStatus">
+              <option value="">Tous les statuts</option>
+              <option value="active">Actif</option>
+              <option value="trial">Essai</option>
+              <option value="suspended">Suspendu</option>
+            </select>
+            <select class="select" [(ngModel)]="orgPlan">
+              <option value="">Tous les plans</option>
+              <option *ngFor="let plan of plans" [value]="plan.name">{{ plan.name }}</option>
+            </select>
+            <span class="muted small results">{{ filteredOrganizations.length }} résultats</span>
+          </div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Organisation</th>
+                  <th>Propriétaire</th>
+                  <th>Plan</th>
+                  <th>Églises</th>
+                  <th>Email</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let org of filteredOrganizations; let i = index">
+                  <td>
+                    <div class="cell-user">
+                      <div class="avatar" [style.background]="avatarTone(i)">{{ initialsOf(org.name) }}</div>
+                      <div class="info"><strong>{{ org.name }}</strong><small>{{ org.slug }}</small></div>
+                    </div>
+                  </td>
+                  <td>{{ ownerName(org) }}</td>
+                  <td><span class="chip" [ngClass]="planChip(planLabel(org))">{{ planLabel(org) }}</span></td>
+                  <td>{{ churchCount(org) }}</td>
+                  <td>{{ org.email || '—' }}</td>
+                  <td><span class="status" [ngClass]="orgStatusClass(org)">{{ orgStatusLabel(org) }}</span></td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="row-action" type="button" title="Églises" (click)="viewOrganizationChurches(org)">👁</button>
+                      <button class="row-action" type="button" title="Modifier" (click)="editOrganization(org)">✎</button>
+                      <button class="row-action" type="button" title="Plus" (click)="orgMenuId = orgMenuId === org.tenant_id ? null : org.tenant_id">⋯</button>
+                      <div class="menu" *ngIf="orgMenuId === org.tenant_id">
+                        <button type="button" (click)="deleteOrganization(org)">Supprimer</button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+                <tr *ngIf="!filteredOrganizations.length"><td colspan="7" class="empty">{{ loading ? 'Chargement…' : 'Aucune organisation.' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" *ngIf="tab === 'churches'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">GESTION</p>
+            <h1>Églises</h1>
+            <p>Toutes les églises de la plateforme</p>
+          </div>
+          <div class="actions"><button class="btn btn-primary btn-sm" type="button" (click)="openChurch()">+ Nouvelle église</button></div>
+        </div>
+        <div class="panel">
+          <div class="toolbar">
+            <div class="search-input"><input [(ngModel)]="churchQuery" placeholder="Rechercher une église..." /></div>
+            <select class="select" [(ngModel)]="churchOrg">
+              <option value="">Toutes les organisations</option>
+              <option *ngFor="let org of organizations" [value]="org.tenant_id">{{ org.name }}</option>
+            </select>
+            <span class="muted small results">{{ filteredChurches.length }} résultats</span>
+          </div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Église</th>
+                  <th>Organisation</th>
+                  <th>Pasteur</th>
+                  <th>Ville</th>
+                  <th>Email</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let church of filteredChurches">
+                  <td><strong>{{ church.name }}</strong></td>
+                  <td>{{ church.organization_name || '—' }}</td>
+                  <td>{{ church.pastor_name || '—' }}</td>
+                  <td>{{ church.country || '—' }}</td>
+                  <td>{{ church.email || '—' }}</td>
+                  <td><span class="status" [ngClass]="church.is_active === false ? 'suspended' : 'active'">{{ church.is_active === false ? 'Inactif' : 'Actif' }}</span></td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="row-action" type="button" (click)="editChurch(church)">✎</button>
+                      <button class="row-action" type="button" (click)="deleteChurch(church)">⋯</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr *ngIf="!filteredChurches.length"><td colspan="7" class="empty">{{ loading ? 'Chargement…' : 'Aucune église.' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" *ngIf="tab === 'users'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">GESTION</p>
+            <h1>Utilisateurs</h1>
+            <p>Tous les comptes utilisateurs de la plateforme</p>
+          </div>
+          <div class="actions"><button class="btn btn-primary btn-sm" type="button" (click)="openUser()">+ Nouvel utilisateur</button></div>
+        </div>
+        <div class="kpi-strip">
+          <div class="kpi"><div class="label">Total</div><strong class="value">{{ users.length }}</strong></div>
+          <div class="kpi success"><div class="label">Actifs</div><strong class="value">{{ stats?.users_active ?? users.length }}</strong></div>
+          <div class="kpi warning"><div class="label">En attente</div><strong class="value">{{ pendingUsers }}</strong></div>
+          <div class="kpi danger"><div class="label">Suspendus</div><strong class="value">{{ suspendedUsers }}</strong></div>
+        </div>
+        <div class="panel">
+          <div class="toolbar">
+            <div class="search-input"><input [(ngModel)]="userQuery" placeholder="Rechercher un utilisateur..." /></div>
+            <select class="select" [(ngModel)]="userRole">
+              <option value="">Tous les rôles</option>
+              <option value="superadmin">Super Admin</option>
+              <option value="admin">Admin Org</option>
+              <option value="member">Membre</option>
+            </select>
+            <select class="select" [(ngModel)]="userOrg">
+              <option value="">Toutes les organisations</option>
+              <option *ngFor="let org of organizations" [value]="org.tenant_id">{{ org.name }}</option>
+            </select>
+            <span class="muted small results">{{ filteredUsers.length }} résultats</span>
+          </div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Utilisateur</th>
+                  <th>Email</th>
+                  <th>Rôle</th>
+                  <th>Organisation</th>
+                  <th>Dernière connexion</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let user of filteredUsers; let i = index">
+                  <td>
+                    <div class="cell-user">
+                      <div class="avatar" [style.background]="avatarTone(i)">{{ initialsOf(user.username) }}</div>
+                      <div class="info"><strong>{{ user.username }}</strong><small>{{ user.username }}</small></div>
+                    </div>
+                  </td>
+                  <td>{{ user.email }}</td>
+                  <td><span class="chip" [ngClass]="roleChip(user)">{{ roleLabel(user) }}</span></td>
+                  <td>{{ user.organization || '— (Plateforme)' }}</td>
+                  <td>{{ lastLoginLabel(user.last_login) }}</td>
+                  <td><span class="status" [ngClass]="user.is_active ? 'active' : 'suspended'">{{ user.is_active ? 'Actif' : 'Suspendu' }}</span></td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="row-action" type="button">👁</button>
+                      <button class="row-action" type="button">✎</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr *ngIf="!filteredUsers.length"><td colspan="7" class="empty">{{ loading ? 'Chargement…' : 'Aucun utilisateur.' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" *ngIf="tab === 'subscriptions'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">FINANCES</p>
+            <h1>Abonnements</h1>
+            <p>Gérez les plans et les abonnements des organisations</p>
+          </div>
+        </div>
+        <div class="plan-grid">
+          <div class="plan-card" *ngFor="let plan of plans" [class.featured]="featuredPlan(plan)">
+            <div class="plan-name">{{ plan.name }}</div>
+            <div class="plan-price">
+              {{ plan.price === '0.00' || plan.price === '0' ? 'Sur devis' : (formatAmount(plan.price) + ' ') }}
+              <small *ngIf="plan.price !== '0.00' && plan.price !== '0'">{{ plan.currency }}/{{ plan.period === 'MONTHLY' ? 'mois' : plan.period.toLowerCase() }}</small>
+            </div>
+            <ul class="plan-features"><li *ngFor="let feature of plan.features">{{ feature }}</li></ul>
+            <div class="plan-count">{{ planCount(plan) }} organisation(s) sur ce plan</div>
+            <button class="btn btn-sm" [ngClass]="featuredPlan(plan) ? 'btn-primary' : 'btn-secondary'" type="button">Gérer</button>
+          </div>
+          <p class="empty" *ngIf="!plans.length">{{ loading ? 'Chargement…' : 'Aucun plan configuré.' }}</p>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div><h2>Abonnements actifs</h2><p>Organisations et leur plan actuel</p></div></div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Organisation</th>
+                  <th>Plan</th>
+                  <th>Début</th>
+                  <th>Prochain renouvellement</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let sub of subscriptions">
+                  <td><strong>{{ sub.organization_name }}</strong></td>
+                  <td><span class="chip" [ngClass]="planChip(sub.plan_name)">{{ sub.plan_name }}</span></td>
+                  <td>{{ formatDate(sub.started_at) }}</td>
+                  <td>{{ formatDate(sub.renewal_at) }}</td>
+                  <td><span class="status" [ngClass]="statusClass(sub.status)">{{ statusLabel(sub.status) }}</span></td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="row-action" type="button">✎</button>
+                      <button class="row-action" type="button">⋯</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr *ngIf="!subscriptions.length"><td colspan="6" class="empty">{{ loading ? 'Chargement…' : 'Aucun abonnement.' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" *ngIf="tab === 'revenue'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">FINANCES</p>
+            <h1>Chiffre d'affaires</h1>
+            <p>Revenus de la plateforme SaaS</p>
+          </div>
+        </div>
+        <div class="kpi-strip">
+          <div class="kpi success"><div class="label">MRR</div><strong class="value">{{ formatMoney(stats?.mrr) }}</strong><span class="sub">XAF</span></div>
+          <div class="kpi"><div class="label">ARR</div><strong class="value">{{ formatMoney(stats?.arr) }}</strong><span class="sub">XAF</span></div>
+          <div class="kpi"><div class="label">Revenu ce mois</div><strong class="value">{{ formatMoney(stats?.mrr) }}</strong><span class="sub">XAF</span></div>
+          <div class="kpi warning"><div class="label">En attente</div><strong class="value">{{ formatMoney(stats?.invoices_pending_amount) }}</strong><span class="sub">XAF</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div><h2>Revenus par mois</h2><p>Évolution sur 6 mois</p></div></div>
+          <div class="panel-body">
+            <div class="chart-box">
+              <div class="chart-bar" *ngFor="let height of revenueBars; let i = index" [class.green]="i % 2 === 1" [style.height.%]="height"></div>
+            </div>
+            <div class="chart-labels"><span *ngFor="let month of chartMonths">{{ month }}</span></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div><h2>Top organisations par revenu</h2></div></div>
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Organisation</th>
+                  <th>Plan</th>
+                  <th>MRR</th>
+                  <th>Églises</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let row of topRevenue">
+                  <td><strong>{{ row.org.name }}</strong></td>
+                  <td><span class="chip" [ngClass]="planChip(row.plan)">{{ row.plan }}</span></td>
+                  <td class="money">{{ formatAmount(row.mrr) }} XAF</td>
+                  <td>{{ row.churches }}</td>
+                </tr>
+                <tr *ngIf="!topRevenue.length"><td colspan="4" class="empty">Aucune donnée.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" *ngIf="tab === 'billing'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">FINANCES</p>
+            <h1>Facturation</h1>
+            <p>Factures et paiements de la plateforme</p>
+          </div>
+          <div class="actions"><button class="btn btn-primary btn-sm" type="button" (click)="openInvoice()">+ Nouvelle facture</button></div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Facture</th>
+                  <th>Organisation</th>
+                  <th>Montant</th>
+                  <th>Date</th>
+                  <th>Échéance</th>
+                  <th>Statut</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let invoice of invoices">
+                  <td><strong>{{ invoice.number }}</strong></td>
+                  <td>{{ invoice.organization_name }}</td>
+                  <td>{{ formatAmount(invoice.amount) }} {{ invoice.currency }}</td>
+                  <td>{{ formatDate(invoice.issued_at) }}</td>
+                  <td>{{ formatDate(invoice.due_at) }}</td>
+                  <td><span class="status" [ngClass]="statusClass(invoice.status)">{{ statusLabel(invoice.status) }}</span></td>
+                  <td>
+                    <div class="row-actions">
+                      <button class="row-action" type="button">👁</button>
+                      <button class="row-action" type="button">⬇</button>
+                    </div>
+                  </td>
+                </tr>
+                <tr *ngIf="!invoices.length"><td colspan="7" class="empty">{{ loading ? 'Chargement…' : 'Aucune facture.' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" *ngIf="tab === 'stats'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">ANALYTIQUE</p>
+            <h1>Statistiques plateforme</h1>
+            <p>Indicateurs clés de la plateforme</p>
+          </div>
+        </div>
+        <div class="kpi-strip">
+          <div class="kpi"><div class="label">Organisations</div><strong class="value">{{ stats?.organizations ?? organizations.length }}</strong></div>
+          <div class="kpi"><div class="label">Utilisateurs</div><strong class="value">{{ stats?.users ?? users.length }}</strong></div>
+          <div class="kpi"><div class="label">Abonnements actifs</div><strong class="value">{{ stats?.subscriptions_active ?? 0 }}</strong></div>
+          <div class="kpi"><div class="label">Tickets ouverts</div><strong class="value">{{ stats?.tickets_open ?? 0 }}</strong></div>
+        </div>
+        <div class="split even">
+          <div class="panel">
+            <div class="panel-header"><div><h2>Croissance des organisations</h2></div></div>
+            <div class="panel-body">
+              <div class="chart-box">
+                <div class="chart-bar" *ngFor="let height of growthBars; let i = index" [class.alt]="i % 2 === 1" [style.height.%]="height"></div>
+              </div>
+              <div class="chart-labels"><span *ngFor="let month of chartMonths">{{ month }}</span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-header"><div><h2>Répartition par plan</h2></div></div>
+            <div class="panel-body">
+              <div class="share-list">
+                <div class="share-row" *ngFor="let share of planShare">
+                  <span class="chip" [ngClass]="share.tone">{{ share.name }}</span>
+                  <div class="share-bar"><div [style.width.%]="share.percent"></div></div>
+                  <span class="muted small">{{ share.count }} orgs ({{ share.percent }}%)</span>
+                </div>
+                <p class="empty" *ngIf="!planShare.length">Aucun plan.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" *ngIf="tab === 'settings'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">PLATEFORME</p>
+            <h1>Paramètres plateforme</h1>
+            <p>Configuration globale de ChurchOS</p>
+          </div>
+        </div>
+        <div class="panel settings-panel">
+          <form [formGroup]="settingsForm" (ngSubmit)="saveSettings()">
+            <div class="form-grid">
+              <div class="field full"><label>Nom de la plateforme</label><input class="input" formControlName="platform_name" /></div>
+              <div class="field full"><label>Email support</label><input class="input" formControlName="support_email" /></div>
+              <div class="field">
+                <label>Devise par défaut</label>
+                <select class="select" formControlName="default_currency">
+                  <option value="XAF">XAF</option>
+                  <option value="EUR">EUR</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Langue par défaut</label>
+                <select class="select" formControlName="default_language">
+                  <option value="fr">Français</option>
+                  <option value="en">English</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-actions">
+              <button class="btn btn-secondary btn-sm" type="button" (click)="resetSettings()">Annuler</button>
+              <button class="btn btn-primary btn-sm" type="submit" [disabled]="saving">{{ saving ? 'Enregistrement…' : 'Enregistrer' }}</button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <section class="view" *ngIf="tab === 'support'">
+        <div class="page-header">
+          <div>
+            <p class="eyebrow">PLATEFORME</p>
+            <h1>Support</h1>
+            <p>Tickets et demandes d'aide</p>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="table-wrap">
+            <table class="data">
+              <thead>
+                <tr>
+                  <th>Ticket</th>
+                  <th>Organisation</th>
+                  <th>Sujet</th>
+                  <th>Priorité</th>
+                  <th>Statut</th>
+                  <th>Date</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let ticket of tickets">
+                  <td><strong>{{ ticket.number }}</strong></td>
+                  <td>{{ ticket.organization_name }}</td>
+                  <td>{{ ticket.subject }}</td>
+                  <td><span class="chip" [class.amber]="ticket.priority === 'HIGH' || ticket.priority === 'URGENT'">{{ priorityLabel(ticket.priority) }}</span></td>
+                  <td><span class="status" [ngClass]="statusClass(ticket.status)">{{ statusLabel(ticket.status) }}</span></td>
+                  <td>{{ formatDate(ticket.created_at) }}</td>
+                  <td><div class="row-actions"><button class="row-action" type="button">👁</button></div></td>
+                </tr>
+                <tr *ngIf="!tickets.length"><td colspan="7" class="empty">{{ loading ? 'Chargement…' : 'Aucun ticket.' }}</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="modal-backdrop" *ngIf="organizationModal" (click)="organizationModal = false">
+  <form class="modal" [formGroup]="orgForm" (ngSubmit)="saveOrganization()" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+    <h2>{{ editingOrganization ? 'Modifier l’organisation' : 'Créer une organisation' }}</h2>
+    <p>Renseignez l’identité de l’organisation cliente.</p>
+    <div class="form-grid">
+      <div class="field"><label>Nom *</label><input formControlName="name" /></div>
+      <div class="field"><label>Slug *</label><input formControlName="slug" /></div>
+      <div class="field"><label>Email</label><input type="email" formControlName="email" /></div>
+      <div class="field"><label>Téléphone</label><input formControlName="phone" /></div>
+      <div class="field full"><label>Adresse</label><textarea formControlName="address"></textarea></div>
+      <div class="field"><label>Pays</label><input formControlName="country" /></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-secondary btn-sm" type="button" (click)="organizationModal = false">Annuler</button>
+      <button class="btn btn-primary btn-sm" [disabled]="orgForm.invalid || saving">Enregistrer</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal-backdrop" *ngIf="churchModal" (click)="churchModal = false">
+  <form class="modal" [formGroup]="churchForm" (ngSubmit)="saveChurch()" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+    <h2>{{ editingChurch ? 'Modifier l’église' : 'Créer une église' }}</h2>
+    <p>L’église est rattachée à une organisation existante.</p>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Organisation *</label>
+        <select formControlName="organization">
+          <option value="">Choisir</option>
+          <option *ngFor="let org of organizations" [value]="org.tenant_id">{{ org.name }}</option>
+        </select>
+      </div>
+      <div class="field"><label>Nom *</label><input formControlName="name" /></div>
+      <div class="field"><label>Slug *</label><input formControlName="slug" /></div>
+      <div class="field"><label>Pasteur</label><input formControlName="pastor_name" /></div>
+      <div class="field"><label>Email</label><input type="email" formControlName="email" /></div>
+      <div class="field"><label>Téléphone</label><input formControlName="phone" /></div>
+      <div class="field full"><label>Adresse</label><textarea formControlName="address"></textarea></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-secondary btn-sm" type="button" (click)="churchModal = false">Annuler</button>
+      <button class="btn btn-primary btn-sm" [disabled]="churchForm.invalid || saving">Enregistrer</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal-backdrop" *ngIf="userModal" (click)="userModal = false">
+  <form class="modal" [formGroup]="accountForm" (ngSubmit)="createAccount()" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+    <h2>Nouvel utilisateur</h2>
+    <p>Créez un compte et attribuez-lui éventuellement une organisation.</p>
+    <div class="form-grid">
+      <div class="field">
+        <label>Organisation</label>
+        <select formControlName="tenant_id">
+          <option value="">Aucune (compte plateforme)</option>
+          <option *ngFor="let org of organizations" [value]="org.tenant_id">{{ org.name }}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Rôle</label>
+        <select formControlName="role">
+          <option value="admin">Administrateur</option>
+          <option value="member">Membre</option>
+        </select>
+      </div>
+      <div class="field"><label>Nom d'utilisateur *</label><input formControlName="username" /></div>
+      <div class="field"><label>Email *</label><input type="email" formControlName="email" /></div>
+      <div class="field full"><label>Mot de passe initial *</label><input type="password" formControlName="password" /></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-secondary btn-sm" type="button" (click)="userModal = false">Annuler</button>
+      <button class="btn btn-primary btn-sm" [disabled]="accountForm.invalid || saving">Créer le compte</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal-backdrop" *ngIf="invoiceModal" (click)="invoiceModal = false">
+  <form class="modal" [formGroup]="invoiceForm" (ngSubmit)="saveInvoice()" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+    <h2>Nouvelle facture</h2>
+    <p>Émettre une facture pour une organisation.</p>
+    <div class="form-grid">
+      <div class="field full">
+        <label>Organisation *</label>
+        <select formControlName="organization">
+          <option *ngFor="let org of organizations" [value]="org.tenant_id">{{ org.name }}</option>
+        </select>
+      </div>
+      <div class="field"><label>Montant *</label><input type="number" formControlName="amount" /></div>
+      <div class="field"><label>Date *</label><input type="date" formControlName="issued_at" /></div>
+      <div class="field"><label>Échéance *</label><input type="date" formControlName="due_at" /></div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-secondary btn-sm" type="button" (click)="invoiceModal = false">Annuler</button>
+      <button class="btn btn-primary btn-sm" [disabled]="invoiceForm.invalid || saving">Créer</button>
+    </div>
+  </form>
+</div>

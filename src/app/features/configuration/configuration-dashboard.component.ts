@@ -12,10 +12,12 @@ import {
   ConfigurationPermission,
   ConfigurationRole,
 } from '../../core/models/configuration';
+import { FinanceConfigurationPayload, FinancialConfiguration } from '../../core/models/finance';
 import { ConfigurationService } from '../../core/services/configuration.service';
+import { FinanceService } from '../../core/services/finance.service';
 import { TenantService } from '../../core/services/tenant.service';
 
-type ConfigurationTab = 'church' | 'users' | 'roles' | 'assignments' | 'audit';
+type ConfigurationTab = 'church' | 'finance' | 'users' | 'roles' | 'assignments' | 'audit';
 
 @Component({
   selector: 'app-configuration-dashboard',
@@ -32,6 +34,16 @@ export class ConfigurationDashboardComponent implements OnInit {
   assignments: ConfigurationAssignment[] = [];
   auditLogs: ConfigurationAuditEntry[] = [];
   churchSettings: ChurchSettings | null = null;
+  financeConfiguration: FinancialConfiguration | null = null;
+  financeConfigurationLoading = false;
+  financeConfigurationLoadFailed = false;
+  financeConfigurationForm: FinanceConfigurationPayload = {
+    level: 1,
+    base_currency: 'XOF',
+    is_suspended: false,
+    suspension_reason: '',
+    reason: '',
+  };
   socialLinksJson = '{}';
   additionalInformationJson = '{}';
   selectedLogoPrimary: File | null = null;
@@ -42,8 +54,13 @@ export class ConfigurationDashboardComponent implements OnInit {
   newUsername = '';
   errorMessage = '';
   successMessage = '';
+  canResetPasswords = false;
   loading = true;
   saving = false;
+  passwordResetModalOpen = false;
+  passwordResetUser: ConfigurationMembership | null = null;
+  passwordResetForm = { password: '', confirmation: '' };
+  private financeConfigurationRequestId = 0;
   roleModalOpen = false;
   roleStep = 1;
   editingRole: ConfigurationRole | null = null;
@@ -67,6 +84,7 @@ export class ConfigurationDashboardComponent implements OnInit {
 
   constructor(
     private configurationService: ConfigurationService,
+    private financeService: FinanceService,
     private tenantService: TenantService,
   ) {}
 
@@ -114,10 +132,43 @@ export class ConfigurationDashboardComponent implements OnInit {
     this.tab = tab;
     this.clearFeedback();
     if (tab === 'church') this.loadChurchSettings();
+    if (tab === 'finance') this.loadFinanceConfiguration();
   }
 
   onChurchChange(): void {
     this.loadChurchSettings();
+    if (this.tab === 'finance') this.loadFinanceConfiguration();
+  }
+
+  onFinanceSuspensionChange(): void {
+    if (!this.financeConfigurationForm.is_suspended) {
+      this.financeConfigurationForm.suspension_reason = '';
+    }
+  }
+
+  saveFinanceConfiguration(): void {
+    if (!this.selectedChurchId || !this.financeConfigurationForm.reason.trim()) return;
+    this.saving = true;
+    const payload: FinanceConfigurationPayload = {
+      ...this.financeConfigurationForm,
+      base_currency: this.financeConfigurationForm.base_currency.trim().toUpperCase(),
+      reason: this.financeConfigurationForm.reason.trim(),
+      suspension_reason: this.financeConfigurationForm.is_suspended
+        ? this.financeConfigurationForm.suspension_reason?.trim() ?? ''
+        : '',
+    };
+    const request = this.financeConfiguration
+      ? this.financeService.updateConfiguration(this.selectedChurchId, payload)
+      : this.financeService.createConfiguration(this.selectedChurchId, payload);
+    request.subscribe({
+      next: (configuration) => {
+        this.financeConfiguration = configuration;
+        this.setFinanceConfigurationForm(configuration);
+        this.saving = false;
+        this.successMessage = 'Les paramètres financiers ont été enregistrés et audités.';
+      },
+      error: (error: HttpErrorResponse) => this.showError(error, 'Impossible d’enregistrer les paramètres financiers.'),
+    });
   }
 
   search(): void {
@@ -152,6 +203,31 @@ export class ConfigurationDashboardComponent implements OnInit {
         this.reloadAudit();
       },
       error: (error: HttpErrorResponse) => this.showError(error, 'Impossible de modifier cette appartenance.'),
+    });
+  }
+
+  openPasswordReset(user: ConfigurationMembership): void {
+    this.clearFeedback();
+    this.passwordResetUser = user;
+    this.passwordResetForm = { password: '', confirmation: '' };
+    this.passwordResetModalOpen = true;
+  }
+
+  resetPassword(): void {
+    const user = this.passwordResetUser;
+    const { password, confirmation } = this.passwordResetForm;
+    if (!user || password.length < 8 || password !== confirmation) return;
+    this.saving = true;
+    this.configurationService.resetUserPassword(user.membership_id, password).subscribe({
+      next: (response) => {
+        this.passwordResetModalOpen = false;
+        this.passwordResetUser = null;
+        this.passwordResetForm = { password: '', confirmation: '' };
+        this.saving = false;
+        this.successMessage = response.detail;
+        this.reloadAudit();
+      },
+      error: (error: HttpErrorResponse) => this.showError(error, 'Impossible de réinitialiser ce mot de passe.'),
     });
   }
 
@@ -413,6 +489,7 @@ export class ConfigurationDashboardComponent implements OnInit {
       users: this.configurationService.listUsers(this.searchUsers),
       assignments: this.configurationService.listAssignments(),
       audit: this.configurationService.listAuditLogs(),
+      access: this.configurationService.getAccess(),
     }).subscribe({
       next: (data) => {
         this.permissions = data.permissions;
@@ -420,6 +497,7 @@ export class ConfigurationDashboardComponent implements OnInit {
         this.users = data.users.results;
         this.assignments = data.assignments.results;
         this.auditLogs = data.audit.results;
+        this.canResetPasswords = data.access.is_organization_admin;
         this.loading = false;
         if (this.selectedChurchId) this.loadChurchSettings();
       },
@@ -440,6 +518,56 @@ export class ConfigurationDashboardComponent implements OnInit {
       },
       error: (error: HttpErrorResponse) => this.showError(error, 'Impossible de charger les paramètres de l’église.'),
     });
+  }
+
+  private loadFinanceConfiguration(): void {
+    if (!this.selectedChurchId) {
+      this.financeConfiguration = null;
+      this.financeConfigurationLoading = false;
+      this.financeConfigurationLoadFailed = false;
+      this.financeConfigurationRequestId += 1;
+      return;
+    }
+    const requestId = ++this.financeConfigurationRequestId;
+    this.financeConfigurationLoading = true;
+    this.financeConfigurationLoadFailed = false;
+    this.financeConfiguration = null;
+    this.financeService.getConfiguration(this.selectedChurchId).subscribe({
+      next: (configuration) => {
+        if (requestId !== this.financeConfigurationRequestId) return;
+        this.financeConfiguration = configuration;
+        this.financeConfigurationForm = configuration
+          ? this.createFinanceConfigurationForm(configuration)
+          : {
+              level: 1,
+              base_currency: 'XOF',
+              is_suspended: false,
+              suspension_reason: '',
+              reason: '',
+            };
+        this.financeConfigurationLoading = false;
+      },
+      error: (error: HttpErrorResponse) => {
+        if (requestId !== this.financeConfigurationRequestId) return;
+        this.financeConfigurationLoading = false;
+        this.financeConfigurationLoadFailed = true;
+        this.showError(error, 'Impossible de charger les paramètres financiers.');
+      },
+    });
+  }
+
+  private setFinanceConfigurationForm(configuration: FinancialConfiguration): void {
+    this.financeConfigurationForm = this.createFinanceConfigurationForm(configuration);
+  }
+
+  private createFinanceConfigurationForm(configuration: FinancialConfiguration): FinanceConfigurationPayload {
+    return {
+      level: configuration.level,
+      base_currency: configuration.base_currency,
+      is_suspended: configuration.is_suspended,
+      suspension_reason: configuration.suspension_reason,
+      reason: '',
+    };
   }
 
   private reloadAudit(): void {

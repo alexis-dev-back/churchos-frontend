@@ -19,7 +19,7 @@ import { EventService } from '../../core/services/event.service';
     </main>
   `,
   styles: [`
-    :host{display:block;color:#25323a}.page{max-width:560px;margin:45px auto;padding:0 14px}.card{padding:25px;background:#fff;border:1px solid #e0e6e6;text-align:center}.card h1{font-size:1.35rem}.eyebrow{color:#148451;font-size:.72rem;font-weight:800}.notice{padding:10px;background:#e9f5ed;color:#23613a}.notice.error{background:#fff0ef;color:#a13333}
+    :host{display:block;color:#1B2A24}.page{max-width:560px;margin:45px auto;padding:0 14px}.card{padding:25px;background:#fff;border:1px solid #E3EAE6;text-align:center}.card h1{font-size:1.35rem}.eyebrow{color:#2A8768;font-size:.72rem;font-weight:800}.notice{padding:10px;background:#f0fdf4;color:#23613a}.notice.error{background:#fff0ef;color:#dc2626}
   `],
 })
 export class EventSelfCheckInComponent implements OnInit {

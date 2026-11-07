@@ -1,6 +1,6 @@
 # ChurchOS Frontend
 
-This Angular app is the frontend shell for the ChurchOS ERP dashboard.
+Interface Angular 18 de ChurchOS. La documentation complète du produit est à la racine du dépôt : [README.md](../README.md) et le dossier [docs/](../docs/).
 
 ## Run locally
 

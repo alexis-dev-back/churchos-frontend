@@ -5,11 +5,12 @@ import { NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs';
 import { SidebarComponent } from './layout/sidebar/sidebar.component';
 import { TopbarComponent } from './layout/topbar/topbar.component';
+import { NotificationCenterComponent } from './layout/notifications/notification-center.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, SidebarComponent, TopbarComponent],
+  imports: [CommonModule, RouterOutlet, SidebarComponent, TopbarComponent, NotificationCenterComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss',
 })
@@ -25,6 +26,6 @@ export class AppComponent implements OnInit {
 
   private updateShell(url: string): void {
     const path = url.split('?')[0];
-    this.showApplicationShell = !['/login', '/register', '/accept-invitation', '/'].includes(path);
+    this.showApplicationShell = !['/login', '/login-super-admin', '/register', '/accept-invitation', '/', '/admin'].includes(path);
   }
 }

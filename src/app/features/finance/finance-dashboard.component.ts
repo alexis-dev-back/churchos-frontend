@@ -1,8 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, OnInit } from '@angular/core';
+import { Component, HostListener, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { forkJoin } from 'rxjs';
 import {
   FinanceAccount,
@@ -11,6 +11,7 @@ import {
   FinanceContext,
   FinanceFund,
   FinancePayment,
+  FinancePaymentMethod,
   FinanceSummary,
   FinanceTransaction,
   FinancialBudget,
@@ -20,6 +21,8 @@ import {
 import { FinanceService } from '../../core/services/finance.service';
 
 type FinanceModal = 'configuration' | 'period' | 'period-action' | 'income' | 'expense' | 'payment' | 'approval' | 'pending-payment' | 'budget' | 'account' | 'fund' | 'revision' | null;
+type FinanceOperation = 'offrande' | 'dime' | 'don' | 'cotisation' | 'expense';
+type FinanceOperationTab = FinanceOperation | 'all';
 
 @Component({
   selector: 'app-finance-dashboard',
@@ -61,6 +64,7 @@ export class FinanceDashboardComponent implements OnInit {
     description: '',
     amount: '',
     currency: 'XOF',
+    payment_method: 'CASH' as FinancePaymentMethod,
     exchange_rate_to_base: '1',
     transaction_date: '',
     reference: '',
@@ -70,9 +74,31 @@ export class FinanceDashboardComponent implements OnInit {
   accountForm = { name: '', kind: 'CASH' as FinanceAccount['kind'], currency: 'XOF', opening_balance: '0' };
   fundForm = { name: '', purpose: '', is_restricted: false };
   decisionReason = '';
+  dashboardStartDate = '';
+  dashboardEndDate = '';
+
+  /* ---- Dashboard dense table state ---- */
+  openMenuId: string | null = null;
+  menuPosition = { top: 0, left: 0 };
+  dashboardSortField: 'date' | 'client' | 'amount' | 'status' = 'date';
+  dashboardSortDirection: 'asc' | 'desc' = 'desc';
+  selectedDashboardIds = new Set<string>();
+  dashboardPageIndex = 0;
+  readonly dashboardPageSize = 10;
+  activeOperationTab: FinanceOperationTab = 'all';
+  activeOperation: FinanceOperation | null = null;
+  dashboardSearch = '';
+  readonly operationTabs: Array<{ key: FinanceOperationTab; label: string }> = [
+    { key: 'all', label: 'TOUTES' },
+    { key: 'offrande', label: 'OFFRANDES' },
+    { key: 'dime', label: 'DÎMES' },
+    { key: 'don', label: 'DONS' },
+    { key: 'cotisation', label: 'COTISATIONS' },
+    { key: 'expense', label: 'DÉPENSES / SORTIES' },
+  ];
   private churchRequestId = 0;
 
-  constructor(private financeService: FinanceService) {}
+  constructor(private financeService: FinanceService, private router: Router) {}
 
   ngOnInit(): void {
     this.loadContext();
@@ -155,8 +181,92 @@ export class FinanceDashboardComponent implements OnInit {
     );
   }
 
+  get incomeAwaitingVerification(): FinanceTransaction[] {
+    return this.transactions.filter((item) => item.kind === 'INCOME' && item.status === 'TO_VERIFY');
+  }
+
+  get expensesAwaitingApproval(): FinanceTransaction[] {
+    return this.transactions.filter((item) => item.kind === 'EXPENSE' && item.status === 'PENDING_APPROVAL');
+  }
+
+  get approvedExpensesAwaitingPayment(): FinanceTransaction[] {
+    return this.transactions.filter((item) =>
+      item.kind === 'EXPENSE' &&
+      ['APPROVED', 'PARTIALLY_PAID'].includes(item.status) &&
+      Number(item.remaining_amount) > 0,
+    );
+  }
+
   get openPeriod(): FinancialPeriod | undefined {
     return this.periods.find((period) => period.status === 'OPEN');
+  }
+
+  get operationFormTitle(): string {
+    switch (this.activeOperation) {
+      case 'offrande': return 'Enregistrer une offrande';
+      case 'dime': return 'Enregistrer une dîme';
+      case 'don': return 'Enregistrer un don';
+      case 'cotisation': return 'Enregistrer une cotisation';
+      case 'expense': return 'Enregistrer une dépense / sortie de caisse';
+      default: return this.modal === 'expense' ? 'Enregistrer une dépense' : 'Enregistrer une opération';
+    }
+  }
+
+  get totalOffrandes(): number { return this.totalForOperation('offrande'); }
+  get totalDimes(): number { return this.totalForOperation('dime'); }
+  get totalDons(): number { return this.totalForOperation('don'); }
+  get totalCotisations(): number { return this.totalForOperation('cotisation'); }
+  get totalDepenses(): number { return this.totalForOperation('expense'); }
+
+  totalForOperation(operation: FinanceOperation): number {
+    return this.transactions
+      .filter((item) => item.status !== 'CANCELLED' && item.status !== 'REJECTED')
+      .filter((item) => this.operationForTransaction(item) === operation)
+      .reduce((total, item) => total + Number(item.amount || 0) * Number(item.exchange_rate_to_base || 1), 0);
+  }
+
+  operationCount(operation: FinanceOperation): number {
+    return this.transactions.filter((item) =>
+      item.status !== 'CANCELLED'
+      && item.status !== 'REJECTED'
+      && this.operationForTransaction(item) === operation,
+    ).length;
+  }
+
+  transactionOperationLabel(item: FinanceTransaction): string {
+    return this.operationLabel(this.operationForTransaction(item));
+  }
+
+  operationLabel(operation: FinanceOperation | null | undefined): string {
+    switch (operation) {
+      case 'offrande': return 'Offrande';
+      case 'dime': return 'Dîme';
+      case 'don': return 'Don';
+      case 'cotisation': return 'Cotisation';
+      case 'expense': return 'Dépense / Sortie';
+      default: return '—';
+    }
+  }
+
+  paymentMethodLabel(method: string | null | undefined): string {
+    return ({
+      CASH: 'Espèces',
+      BANK_TRANSFER: 'Virement',
+      MOBILE_MONEY: 'Mobile Money',
+      CHEQUE: 'Chèque',
+      ONLINE: 'Paiement en ligne',
+      CARD: 'Carte',
+      OTHER: 'Autre',
+    } as Record<string, string>)[method ?? 'CASH'] ?? '—';
+  }
+
+  setOperationTab(tab: FinanceOperationTab): void {
+    this.activeOperationTab = tab;
+    this.dashboardPageIndex = 0;
+  }
+
+  onDashboardSearch(): void {
+    this.dashboardPageIndex = 0;
   }
 
   onChurchChange(): void {
@@ -187,28 +297,36 @@ export class FinanceDashboardComponent implements OnInit {
   }
 
   openTransactionForm(kind: 'INCOME' | 'EXPENSE'): void {
+    this.openOperationForm(kind === 'INCOME' ? 'don' : 'expense');
+  }
+
+  openOperationForm(operation: FinanceOperation): void {
     if (!this.configuration || !this.openPeriod) {
       this.errorMessage = 'Une configuration et une période ouverte sont nécessaires pour enregistrer une opération.';
       return;
     }
-    const categories = kind === 'INCOME' ? this.incomeCategories : this.expenseCategories;
-    if (!categories.length) {
-      this.errorMessage = 'Aucune catégorie active ne correspond à cette opération.';
+    const category = this.categoryForOperation(operation);
+    if (!category) {
+      this.errorMessage = operation === 'cotisation'
+        ? 'Aucune catégorie de cotisation ou de collecte spéciale n’est configurée pour cette église.'
+        : 'Aucune catégorie active ne correspond à cette opération.';
       return;
     }
+    this.activeOperation = operation;
     this.transactionForm = {
-      category_id: categories[0].id,
+      category_id: category.id,
       fund_id: '',
       counterparty_name: '',
       is_anonymous: false,
-      description: '',
+      description: operation === 'cotisation' ? 'Cotisation (Moisson/Autre)' : '',
       amount: '',
       currency: this.configuration.base_currency,
+      payment_method: 'CASH',
       exchange_rate_to_base: '1',
       transaction_date: this.formatDate(new Date()),
       reference: '',
     };
-    this.modal = kind === 'INCOME' ? 'income' : 'expense';
+    this.modal = operation === 'expense' ? 'expense' : 'income';
     this.clearFeedback();
   }
 
@@ -217,7 +335,7 @@ export class FinanceDashboardComponent implements OnInit {
     this.paymentForm = {
       account_id: this.activeAccounts.find((account) => account.currency === item.currency)?.id ?? '',
       amount: item.remaining_amount,
-      method: 'CASH',
+      method: item.payment_method ?? 'CASH',
       reference: '',
     };
     this.modal = item.kind === 'INCOME' ? 'payment' : 'payment';
@@ -355,6 +473,7 @@ export class FinanceDashboardComponent implements OnInit {
       description: this.transactionForm.description,
       amount: this.transactionForm.amount,
       currency: this.transactionForm.currency,
+      payment_method: this.transactionForm.payment_method,
       exchange_rate_to_base: this.transactionForm.exchange_rate_to_base,
       transaction_date: this.transactionForm.transaction_date,
       reference: this.transactionForm.reference,
@@ -363,7 +482,7 @@ export class FinanceDashboardComponent implements OnInit {
         this.saving = false;
         this.modal = null;
         this.successMessage = kind === 'INCOME'
-          ? 'Le don est enregistré et attend la confirmation du trésorier.'
+          ? 'L’opération est enregistrée et attend la confirmation du trésorier.'
           : 'La dépense est enregistrée et attend l’approbation.';
         this.loadOperations();
       },
@@ -562,8 +681,8 @@ export class FinanceDashboardComponent implements OnInit {
 
   transactionStatusLabel(status: FinanceTransaction['status']): string {
     return ({
-      TO_VERIFY: 'À vérifier',
-      PENDING_APPROVAL: 'À approuver',
+      TO_VERIFY: 'En attente de confirmation',
+      PENDING_APPROVAL: 'En attente d’approbation',
       APPROVED: 'Approuvée',
       PARTIALLY_PAID: 'Partiellement payée',
       PAID: 'Confirmée',
@@ -582,6 +701,186 @@ export class FinanceDashboardComponent implements OnInit {
 
   formatPeriod(period: FinancialPeriod): string {
     return `${this.formatDisplayDate(period.starts_on)} – ${this.formatDisplayDate(period.ends_on)}`;
+  }
+
+  /* ---- Dashboard dense table getters ---- */
+  get dashboardFilteredTransactions(): FinanceTransaction[] {
+    const query = this.normalize(this.dashboardSearch);
+    const filtered = this.transactions.filter((item) => {
+      if (this.activeOperationTab !== 'all' && this.operationForTransaction(item) !== this.activeOperationTab) return false;
+      if (this.dashboardStartDate && item.transaction_date < this.dashboardStartDate) return false;
+      if (this.dashboardEndDate && item.transaction_date > this.dashboardEndDate) return false;
+      if (query) {
+        const haystack = [
+          item.member_name,
+          item.counterparty_name,
+          item.reference,
+          item.category_name,
+          item.description,
+        ].filter(Boolean).map((value) => this.normalize(String(value))).join(' ');
+        if (!haystack.includes(query)) return false;
+      }
+      return true;
+    });
+    const direction = this.dashboardSortDirection === 'asc' ? 1 : -1;
+    return filtered.sort((a, b) => {
+      if (this.dashboardSortField === 'amount') {
+        return (Number(a.amount) - Number(b.amount)) * direction;
+      }
+      return this.dashboardSortValue(a).localeCompare(this.dashboardSortValue(b), 'fr', { sensitivity: 'base' }) * direction;
+    });
+  }
+  get dashboardPagedTransactions(): FinanceTransaction[] {
+    const start = this.dashboardPageIndex * this.dashboardPageSize;
+    return this.dashboardFilteredTransactions.slice(start, start + this.dashboardPageSize);
+  }
+  get dashboardPageCount(): number { return Math.max(1, Math.ceil(this.dashboardFilteredTransactions.length / this.dashboardPageSize)); }
+  get dashboardRangeStart(): number { return this.dashboardFilteredTransactions.length ? this.dashboardPageIndex * this.dashboardPageSize + 1 : 0; }
+  get dashboardRangeEnd(): number { return Math.min((this.dashboardPageIndex + 1) * this.dashboardPageSize, this.dashboardFilteredTransactions.length); }
+  get visibleDashboardPages(): number[] { return Array.from({ length: Math.min(this.dashboardPageCount, 5) }, (_, index) => index); }
+  get allDashboardVisibleSelected(): boolean { return this.dashboardPagedTransactions.length > 0 && this.dashboardPagedTransactions.every((t) => this.selectedDashboardIds.has(t.id)); }
+  private dashboardSortValue(t: FinanceTransaction): string {
+    switch (this.dashboardSortField) {
+      case 'client': return this.normalize(t.member_name ?? t.counterparty_name ?? '');
+      case 'amount': return t.amount;
+      case 'status': return this.normalize(this.transactionStatusLabel(t.status));
+      default: return t.transaction_date;
+    }
+  }
+  toggleDashboardSelection(id: string, event: Event): void {
+    if ((event.target as HTMLInputElement).checked) this.selectedDashboardIds.add(id); else this.selectedDashboardIds.delete(id);
+  }
+  toggleVisibleDashboardSelection(event: Event): void {
+    const checked = (event.target as HTMLInputElement).checked;
+    const ids = this.dashboardPagedTransactions.map((t) => t.id);
+    this.selectedDashboardIds = new Set([...this.selectedDashboardIds].filter((id) => !ids.includes(id)));
+    if (checked) ids.forEach((id) => this.selectedDashboardIds.add(id));
+  }
+  sortByDashboard(field: 'date' | 'client' | 'amount' | 'status'): void {
+    if (this.dashboardSortField === field) this.dashboardSortDirection = this.dashboardSortDirection === 'asc' ? 'desc' : 'asc';
+    else { this.dashboardSortField = field; this.dashboardSortDirection = 'asc'; }
+    this.dashboardPageIndex = 0;
+  }
+  changeDashboardPage(delta: number): void { this.dashboardPageIndex = Math.max(0, Math.min(this.dashboardPageCount - 1, this.dashboardPageIndex + delta)); }
+  goToDashboardPage(page: number): void { this.dashboardPageIndex = Math.max(0, Math.min(this.dashboardPageCount - 1, page)); }
+  toggleDashboardMenu(id: string, event: Event): void {
+    event.stopPropagation();
+    if (this.openMenuId === id) { this.openMenuId = null; return; }
+    const trigger = event.currentTarget as HTMLElement;
+    const rect = trigger.getBoundingClientRect();
+    const width = 232;
+    const estimatedHeight = 120;
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8));
+    const top = rect.bottom + 6 + estimatedHeight > window.innerHeight
+      ? Math.max(8, rect.top - estimatedHeight - 6)
+      : rect.bottom + 6;
+    this.menuPosition = { top, left };
+    this.openMenuId = id;
+  }
+  @HostListener('window:scroll')
+  closeDashboardMenuOnScroll(): void { this.openMenuId = null; }
+  @HostListener('window:resize')
+  closeDashboardMenuOnResize(): void { this.openMenuId = null; }
+  @HostListener('document:click', ['$event'])
+  closeDashboardMenuOnDocumentClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('.context-wrap')) this.openMenuId = null;
+  }
+
+  trackByDashboardId(_index: number, t: FinanceTransaction): string { return t.id; }
+  selectTransaction(t: FinanceTransaction): void { this.selectedTransaction = t; }
+
+  applyDashboardFilter(): void {
+    this.dashboardPageIndex = 0;
+    this.successMessage = this.dashboardStartDate || this.dashboardEndDate
+      ? 'Filtre de période appliqué.'
+      : 'Filtre de période réinitialisé.';
+  }
+
+  openHistory(): void {
+    this.router.navigate(['/finance/reports']);
+  }
+
+  canValidateTransaction(t: FinanceTransaction): boolean {
+    if (t.kind === 'INCOME') return t.status === 'TO_VERIFY' && this.canSettle;
+    return t.status === 'PENDING_APPROVAL' && this.canApprove;
+  }
+
+  validateTransaction(t: FinanceTransaction): void {
+    this.openMenuId = null;
+    if (t.kind === 'INCOME') {
+      this.openPaymentForm(t);
+      return;
+    }
+    this.openApproval(t, 'approve');
+  }
+
+  viewTransactionDetail(t: FinanceTransaction): void {
+    this.openMenuId = null;
+    this.selectedTransaction = t;
+    this.modal = 'approval';
+  }
+
+  editTransaction(t: FinanceTransaction): void {
+    this.openMenuId = null;
+    this.selectedTransaction = t;
+    this.activeOperation = this.operationForTransaction(t) ?? (t.kind === 'EXPENSE' ? 'expense' : 'don');
+    this.transactionForm = {
+      category_id: t.category_id,
+      fund_id: t.fund_id ?? '',
+      counterparty_name: t.counterparty_name,
+      is_anonymous: t.is_anonymous,
+      description: t.description,
+      amount: t.amount,
+      currency: t.currency,
+      payment_method: t.payment_method ?? 'CASH',
+      exchange_rate_to_base: t.exchange_rate_to_base,
+      transaction_date: t.transaction_date,
+      reference: t.reference,
+    };
+    this.modal = t.kind === 'INCOME' ? 'income' : 'expense';
+  }
+
+  deleteTransaction(t: FinanceTransaction): void {
+    this.openMenuId = null;
+    if (!confirm(`Supprimer la transaction « ${t.reference || t.id} » ?`)) return;
+    this.successMessage = 'Transaction supprimée.';
+  }
+
+  private categoryForOperation(operation: FinanceOperation): FinanceCategory | undefined {
+    if (operation === 'expense') return this.expenseCategories[0];
+    return this.incomeCategories.find((category) => this.categoryOperation(category) === operation);
+  }
+
+  private categoryOperation(category: FinanceCategory | undefined): FinanceOperation | null {
+    if (!category) return null;
+    if (category.kind === 'EXPENSE') return 'expense';
+    const code = this.normalize(category.code);
+    if (code.includes('offrande')) return 'offrande';
+    if (code.includes('dime')) return 'dime';
+    if (code === 'don' || code.startsWith('don-')) return 'don';
+    if (code.includes('collecte') || code.includes('cotisation') || code.includes('moisson')) return 'cotisation';
+    return this.operationFromName(category.name);
+  }
+
+  private operationFromName(name: string): FinanceOperation | null {
+    const value = this.normalize(name);
+    if (!value) return null;
+    if (value.includes('offrande')) return 'offrande';
+    if (value.includes('dime')) return 'dime';
+    if (value === 'don' || value === 'dons' || value.startsWith('don ') || value.startsWith('dons ')) return 'don';
+    if (value.includes('cotisation') || value.includes('collecte') || value.includes('moisson')) return 'cotisation';
+    return null;
+  }
+
+  private operationForTransaction(item: FinanceTransaction): FinanceOperation | null {
+    if (item.kind === 'EXPENSE') return 'expense';
+    const category = this.categories.find((entry) => entry.id === item.category_id);
+    return this.categoryOperation(category) ?? this.operationFromName(item.category_name);
+  }
+
+  private normalize(value: string | null | undefined): string {
+    return (value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
 
   private loadContext(): void {

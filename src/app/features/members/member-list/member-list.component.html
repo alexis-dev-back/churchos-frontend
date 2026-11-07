@@ -1,0 +1,55 @@
+<section class="page">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">ANNUAIRE</p>
+      <h1>Membres</h1>
+      <p>Gestion des profils, statuts et invitations</p>
+    </div>
+    <div class="actions">
+      <button class="btn btn-secondary btn-sm">Importer</button>
+      <button class="btn btn-primary btn-sm" (click)="openEditor()">+ Nouveau membre</button>
+    </div>
+  </header>
+
+  <div class="kpi-strip">
+    <div class="kpi"><div class="label">Total</div><strong class="value">{{ members.length }}</strong></div>
+    <div class="kpi success"><div class="label">Actifs</div><strong class="value">{{ activeCount }}</strong></div>
+    <div class="kpi warning"><div class="label">En attente</div><strong class="value">{{ pendingCount }}</strong></div>
+    <div class="kpi danger"><div class="label">Suspendus</div><strong class="value">{{ suspendedCount }}</strong></div>
+  </div>
+
+  <div class="panel">
+    <div class="toolbar">
+      <div class="search-input"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input class="search" [(ngModel)]="searchTerm" placeholder="Rechercher un membre..." /></div>
+      <select class="select" [(ngModel)]="statusFilter"><option value="">Tous les statuts</option><option value="ACTIVE">Actif</option><option value="PENDING">En attente</option><option value="SUSPENDED">Suspendu</option><option value="ARCHIVED">Archivé</option></select>
+      <select class="select" [(ngModel)]="churchFilter"><option value="">Toutes les églises</option><option *ngFor="let c of churches" [value]="c.church_id">{{ c.name }}</option></select>
+      <span class="muted small" style="margin-left:auto">{{ filteredMembers.length }} résultats</span>
+    </div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>Membre</th><th>Email</th><th>Téléphone</th><th>Statut</th><th>Église</th><th>Actions</th></tr></thead>
+        <tbody>
+          <tr *ngFor="let m of filteredMembers">
+            <td><div class="cell-user"><div class="avatar">{{ m.first_name.slice(0,1) }}{{ m.last_name.slice(0,1) }}</div><div class="info"><strong>{{ m.first_name }} {{ m.last_name }}</strong><small>Membre depuis {{ m.member_since || '—' }}</small></div></div></td>
+            <td>{{ m.email }}</td>
+            <td>{{ m.phone || '—' }}</td>
+            <td><span class="status" [attr.data-status]="m.status">{{ statusLabel(m.status) }}</span></td>
+            <td>{{ churchName(m.church) }}</td>
+            <td><div class="row-actions"><button class="row-action" (click)="view(m)" title="Voir">👁</button><button class="row-action" (click)="edit(m)" title="Modifier">✎</button><button class="row-action" title="Plus">⋯</button></div></td>
+          </tr>
+          <tr *ngIf="!filteredMembers.length"><td colspan="6" class="empty">Aucun membre trouvé.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid var(--border)">
+      <span class="muted small">Affichage {{ filteredMembers.length }} sur {{ members.length }}</span>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-secondary btn-sm" disabled>Préc.</button>
+        <button class="btn btn-primary btn-sm">1</button>
+        <button class="btn btn-secondary btn-sm">2</button>
+        <button class="btn btn-secondary btn-sm">3</button>
+        <button class="btn btn-secondary btn-sm">Suiv.</button>
+      </div>
+    </div>
+  </div>
+</section>

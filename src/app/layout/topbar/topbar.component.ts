@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, EventEmitter, OnInit, Output } from '@angular/core';
+import { Component, DestroyRef, EventEmitter, OnDestroy, OnInit, Output } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { NavigationEnd } from '@angular/router';
 import { filter, startWith } from 'rxjs';
@@ -15,19 +15,36 @@ import { TenantService } from '../../core/services/tenant.service';
   templateUrl: './topbar.component.html',
   styleUrl: './topbar.component.scss',
 })
-export class TopbarComponent implements OnInit {
+export class TopbarComponent implements OnInit, OnDestroy {
   @Output() menuToggle = new EventEmitter<void>();
   profileOpen = false;
   user: MeResponse | null = null;
+  organizationName = 'ChurchOS';
+  todayLabel = '';
+  timeLabel = '';
+  private clockTimer?: ReturnType<typeof setInterval>;
 
   constructor(private authService: AuthService, private tenantService: TenantService, private router: Router, private destroyRef: DestroyRef) {}
 
   ngOnInit(): void {
+    this.updateClock();
+    this.clockTimer = setInterval(() => this.updateClock(), 30_000);
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
       startWith(null),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(() => this.loadUser());
+  }
+
+  ngOnDestroy(): void {
+    if (this.clockTimer) clearInterval(this.clockTimer);
+  }
+
+  private updateClock(): void {
+    const now = new Date();
+    const date = new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }).format(now);
+    this.todayLabel = date.charAt(0).toUpperCase() + date.slice(1);
+    this.timeLabel = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' }).format(now);
   }
 
   get isTenantAdmin(): boolean {
@@ -62,13 +79,14 @@ export class TopbarComponent implements OnInit {
   }
 
   private loadUser(): void {
-    if (!this.authService.isAuthenticated()) { this.user = null; return; }
+    if (!this.authService.isAuthenticated()) { this.user = null; this.organizationName = 'ChurchOS'; return; }
     this.authService.me().subscribe({
       next: (user) => {
         this.user = user;
+        this.organizationName = user.active_organization?.name || 'ChurchOS';
         if (user.active_organization) this.tenantService.setOrganization({ tenant_id: user.active_organization.tenant_id, name: user.active_organization.name });
       },
-      error: () => this.user = null,
+      error: () => { this.user = null; this.organizationName = 'ChurchOS'; },
     });
   }
 }

@@ -1,72 +1,688 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Church, Organization, OrganizationWriteRequest, TenantSiteWriteRequest } from '../../../core/models/tenant';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
+import { catchError, forkJoin, of } from 'rxjs';
+import { MeResponse } from '../../../core/models/auth';
+import { Church, Organization, OrganizationWriteRequest, PlatformUser, TenantSiteWriteRequest } from '../../../core/models/tenant';
+import { AuthService } from '../../../core/services/auth.service';
+import {
+  PlatformInvoice,
+  PlatformPlan,
+  PlatformService,
+  PlatformSettings,
+  PlatformStats,
+  PlatformSubscription,
+  PlatformTicket,
+} from '../../../core/services/platform.service';
 import { TenantService } from '../../../core/services/tenant.service';
 
-type Tab = 'organizations' | 'churches' | 'accounts';
+type Tab =
+  | 'dashboard'
+  | 'stats'
+  | 'organizations'
+  | 'churches'
+  | 'users'
+  | 'subscriptions'
+  | 'revenue'
+  | 'billing'
+  | 'settings'
+  | 'support';
 
 @Component({
   selector: 'app-super-admin',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule],
-  template: `
-    <section class="page">
-      <header class="page-heading"><div><p class="eyebrow">CONSOLE DE PLATEFORME</p><h1>Superadministration</h1><p>GÃ©rez toutes les organisations, les Ã©glises et les comptes sans appartenir Ã  un tenant.</p></div><span class="badge">SUPERADMIN</span></header>
-      <p class="notice error" *ngIf="errorMessage" role="alert">{{ errorMessage }}</p><p class="notice success" *ngIf="successMessage" role="status">{{ successMessage }}</p>
-      <div class="summary-strip"><article class="summary-tile"><span class="summary-mark">O</span><div><strong>{{ organizations.length }}</strong><span>Organisations</span></div></article><article class="summary-tile"><span class="summary-mark">Ã‰</span><div><strong>{{ churches.length }}</strong><span>Ã‰glises sÃ©lectionnÃ©es</span></div></article><article class="summary-tile"><span class="summary-mark">S</span><div><strong>Global</strong><span>AccÃ¨s plateforme</span></div></article></div>
-      <nav class="tabs"><button [class.selected]="tab === 'organizations'" (click)="setTab('organizations')">Organisations</button><button [class.selected]="tab === 'churches'" (click)="setTab('churches')">Ã‰glises</button><button [class.selected]="tab === 'accounts'" (click)="setTab('accounts')">Comptes</button></nav>
-
-      <section class="panel" *ngIf="tab === 'organizations'"><header class="panel-heading"><div><h2>Organisations</h2><p>{{ organizations.length }} organisation(s) sur la plateforme</p></div><button class="primary" (click)="openOrganization()">Nouvelle organisation</button></header><div class="table-wrap"><table><thead><tr><th>Nom</th><th>Slug</th><th>Email</th><th>Ã‰tat</th><th>Actions</th></tr></thead><tbody><tr *ngFor="let org of organizations"><td><strong>{{ org.name }}</strong></td><td>{{ org.slug }}</td><td>{{ org.email || 'â€”' }}</td><td>{{ org.is_active ? 'Active' : 'Inactive' }}</td><td><div class="actions"><button (click)="selectOrganization(org)">Ã‰glises</button><button (click)="editOrganization(org)">Modifier</button><button class="danger" (click)="deleteOrganization(org)">Supprimer</button></div></td></tr><tr *ngIf="!organizations.length"><td colspan="5" class="empty">{{ loading ? 'Chargementâ€¦' : 'Aucune organisation.' }}</td></tr></tbody></table></div></section>
-
-      <section class="panel" *ngIf="tab === 'churches'"><header class="panel-heading"><div><h2>Ã‰glises</h2><p>{{ selectedOrganization?.name || 'SÃ©lectionnez une organisation' }}</p></div><div class="toolbar"><select aria-label="Organisation" [value]="selectedOrganizationId" (change)="chooseOrganization($event)"><option value="">Choisir une organisation</option><option *ngFor="let org of organizations" [value]="org.tenant_id">{{ org.name }}</option></select><button class="primary" [disabled]="!selectedOrganization" (click)="openChurch()">Nouvelle Ã©glise</button></div></header><div class="table-wrap"><table><thead><tr><th>Ã‰glise</th><th>Pasteur</th><th>Email</th><th>TÃ©lÃ©phone</th><th>Actions</th></tr></thead><tbody><tr *ngFor="let church of churches"><td><strong>{{ church.name }}</strong></td><td>{{ church.pastor_name || 'â€”' }}</td><td>{{ church.email || 'â€”' }}</td><td>{{ church.phone || 'â€”' }}</td><td><div class="actions"><button (click)="editChurch(church)">Modifier</button><button class="danger" (click)="deleteChurch(church)">Supprimer</button></div></td></tr><tr *ngIf="!churches.length"><td colspan="5" class="empty">{{ loading ? 'Chargementâ€¦' : 'Aucune Ã©glise Ã  afficher.' }}</td></tr></tbody></table></div></section>
-
-      <section class="panel" *ngIf="tab === 'accounts'"><header class="panel-heading"><div><h2>CrÃ©er un compte</h2><p>CrÃ©ez un compte et attribuez-lui un rÃ´le dans une organisation.</p></div></header><form class="account-form" [formGroup]="accountForm" (ngSubmit)="createAccount()"><label>Organisation<select formControlName="tenant_id"><option value="">Aucune (compte plateforme)</option><option *ngFor="let org of organizations" [value]="org.tenant_id">{{ org.name }}</option></select></label><label>RÃ´le<select formControlName="role"><option value="admin">Administrateur</option><option value="member">Membre</option></select></label><label>Nom dâ€™utilisateur<input formControlName="username" /></label><label>Email<input type="email" formControlName="email" /></label><label>Mot de passe initial<input type="password" formControlName="password" /></label><button class="primary" [disabled]="accountForm.invalid || saving">{{ saving ? 'CrÃ©ationâ€¦' : 'CrÃ©er le compte' }}</button></form></section>
-
-      <div class="modal-backdrop" *ngIf="organizationModal" (click)="organizationModal = false"><form class="modal" [formGroup]="orgForm" (ngSubmit)="saveOrganization()" (click)="$event.stopPropagation()" role="dialog" aria-modal="true"><header class="modal-heading"><h2>{{ editingOrganization ? 'Modifier lâ€™organisation' : 'CrÃ©er une organisation' }}</h2><button type="button" (click)="organizationModal = false">Ã—</button></header><div class="form-grid"><label>Nom *<input formControlName="name" /></label><label>Slug *<input formControlName="slug" /></label><label>Email<input type="email" formControlName="email" /></label><label>TÃ©lÃ©phone<input formControlName="phone" /></label><label>Adresse<textarea formControlName="address"></textarea></label><label>Pays<input formControlName="country" /></label></div><div class="actions end"><button class="primary" [disabled]="orgForm.invalid || saving">Enregistrer</button><button type="button" class="secondary" (click)="organizationModal = false">Annuler</button></div></form></div>
-
-      <div class="modal-backdrop" *ngIf="churchModal" (click)="churchModal = false"><form class="modal" [formGroup]="churchForm" (ngSubmit)="saveChurch()" (click)="$event.stopPropagation()" role="dialog" aria-modal="true"><header class="modal-heading"><h2>{{ editingChurch ? 'Modifier lâ€™Ã©glise' : 'CrÃ©er une Ã©glise' }}</h2><button type="button" (click)="churchModal = false">Ã—</button></header><div class="form-grid"><label>Nom *<input formControlName="name" /></label><label>Slug *<input formControlName="slug" /></label><label>Pasteur<input formControlName="pastor_name" /></label><label>Email<input type="email" formControlName="email" /></label><label>TÃ©lÃ©phone<input formControlName="phone" /></label><label>Adresse<textarea formControlName="address"></textarea></label></div><div class="actions end"><button class="primary" [disabled]="churchForm.invalid || saving">Enregistrer</button><button type="button" class="secondary" (click)="churchModal = false">Annuler</button></div></form></div>
-    </section>
-  `,
-  styles: [`
-    :host{display:block;color:#25323a}.page{max-width:1320px;margin:auto;padding:18px 0 30px}.page-heading,.panel-heading,.modal-heading{display:flex;justify-content:space-between;align-items:center;gap:14px}.page-heading{margin-bottom:20px}.eyebrow{margin:0 0 6px;color:#148451;font-size:.7rem;font-weight:800}.page-heading h1{margin:0;font-size:1.6rem}.page-heading p,.panel-heading p{margin:5px 0 0;color:#748188;font-size:.82rem}.badge{padding:7px 10px;background:#0b4939;color:white;font-size:.7rem;font-weight:800}.summary-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}.summary-tile{display:flex;align-items:center;gap:11px;padding:13px;background:white;border:1px solid #e0e6e6}.summary-mark{display:grid;place-items:center;width:36px;height:36px;background:#e1efe7;color:#176b50;font-weight:800}.summary-tile strong,.summary-tile span{display:block}.summary-tile strong{font-size:1rem}.summary-tile span{color:#77848a;font-size:.73rem}.tabs{display:flex;gap:4px;border-bottom:1px solid #dce4e2;margin-bottom:14px}.tabs button{padding:11px 14px;border:0;border-bottom:2px solid transparent;background:none;color:#687477;font-weight:700}.tabs button.selected{border-color:#0b8050;color:#145d42}.panel{padding:18px;background:white;border:1px solid #e0e6e6}.panel-heading{margin-bottom:14px}.panel-heading h2,.modal-heading h2{margin:0;font-size:1rem}.primary,.secondary,.danger{min-height:36px;padding:8px 11px;border:1px solid #0b4939;background:#0b4939;color:white;font-weight:700;cursor:pointer}.secondary{border-color:#dce3e3;background:white;color:#34434a}.danger{border-color:#bd4141;background:white;color:#a53535}.primary:disabled{opacity:.55}.table-wrap{overflow:auto}table{width:100%;min-width:720px;border-collapse:collapse}thead{background:#dcece5}th,td{padding:11px 12px;text-align:left;font-size:.78rem}th{color:#34464a}td{border-top:1px solid #edf0f0}.actions,.toolbar{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.actions button{border:0;background:none;color:#176b50;font-size:.75rem;font-weight:700;cursor:pointer}.actions .danger{color:#a53535}.toolbar select{min-height:36px;padding:7px;border:1px solid #dce3e3;background:white}.empty{text-align:center;color:#77848a;padding:20px}.account-form,.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.account-form label,.form-grid label{display:grid;gap:6px;color:#53615e;font-size:.8rem;font-weight:700}.account-form input,.account-form select,.form-grid input,.form-grid textarea{min-height:38px;padding:8px 10px;border:1px solid #cfd9d6;background:white;font:inherit}.account-form button{align-self:end}.modal-backdrop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:18px;background:#17262480}.modal{width:min(660px,100%);max-height:90vh;overflow:auto;padding:20px;background:white;border:1px solid #dce4e2;box-shadow:0 24px 80px #10221f40}.modal-heading{margin-bottom:14px}.modal-heading button{border:0;background:none;font-size:1.4rem}.form-grid{margin:16px 0}.end{justify-content:flex-end}.notice{padding:10px 12px;margin-bottom:12px}.notice.error{background:#fff0ef;color:#a13333}.notice.success{background:#e7f3eb;color:#256844}@media(max-width:760px){.summary-strip{grid-template-columns:1fr}.page-heading,.panel-heading{align-items:flex-start;flex-direction:column}.account-form,.form-grid{grid-template-columns:1fr}}
-  `],
+  imports: [CommonModule, FormsModule, ReactiveFormsModule],
+  templateUrl: './super-admin.component.html',
+  styleUrl: './super-admin.component.scss',
 })
 export class SuperAdminComponent implements OnInit {
-  tab: Tab = 'organizations';
+  tab: Tab = 'dashboard';
   organizations: Organization[] = [];
   churches: Church[] = [];
+  users: PlatformUser[] = [];
+  plans: PlatformPlan[] = [];
+  subscriptions: PlatformSubscription[] = [];
+  invoices: PlatformInvoice[] = [];
+  tickets: PlatformTicket[] = [];
+  stats: PlatformStats | null = null;
+  currentUser: MeResponse | null = null;
   selectedOrganization: Organization | null = null;
   selectedOrganizationId = '';
   loading = false;
   saving = false;
+  sidebarOpen = false;
   organizationModal = false;
   churchModal = false;
+  userModal = false;
+  invoiceModal = false;
+  orgMenuId: string | null = null;
+  userMenuId: string | number | null = null;
+  subMenuId: string | null = null;
   editingOrganization: string | null = null;
   editingChurch: string | null = null;
   errorMessage = '';
   successMessage = '';
-  orgForm = this.fb.group({ name: ['', Validators.required], slug: ['', Validators.required], email: [''], phone: [''], address: [''], country: [''] });
-  churchForm = this.fb.group({ name: ['', Validators.required], slug: ['', Validators.required], pastor_name: [''], email: [''], phone: [''], address: [''] });
-  accountForm = this.fb.group({ tenant_id: [''], role: ['admin' as 'admin' | 'member', Validators.required], username: ['', Validators.required], email: ['', [Validators.required, Validators.email]], password: ['', [Validators.required, Validators.minLength(8)]] });
+  orgQuery = '';
+  orgStatus = '';
+  orgPlan = '';
+  churchQuery = '';
+  churchOrg = '';
+  userQuery = '';
+  userRole = '';
+  userOrg = '';
+  globalQuery = '';
+  chartMonths = ['Mai', 'Juin', 'Juil', 'Août', 'Sept', 'Oct'];
+  revenueBars = [55, 40, 62, 48, 70, 52, 78, 58, 85, 62, 92, 68];
+  growthBars = [30, 45, 40, 55, 50, 65, 60, 70, 75, 80, 85, 90];
 
-  constructor(private fb: FormBuilder, private tenant: TenantService) {}
-  ngOnInit(): void { this.loadOrganizations(); }
-  get totalChurches(): number { return this.selectedOrganization ? this.churches.length : 0; }
-  setTab(tab: Tab): void { this.tab = tab; this.errorMessage = ''; this.successMessage = ''; }
-  loadOrganizations(): void { this.loading = true; this.tenant.listPlatformOrganizations().subscribe({ next: (items) => { this.organizations = items; this.loading = false; }, error: (error) => { this.errorMessage = this.errorText(error); this.loading = false; } }); }
-  selectOrganization(org: Organization): void { this.selectedOrganization = org; this.selectedOrganizationId = org.tenant_id; this.tab = 'churches'; this.loadChurches(org); }
-  chooseOrganization(event: Event): void { const id = (event.target as HTMLSelectElement).value; this.selectedOrganization = this.organizations.find((org) => org.tenant_id === id) ?? null; this.selectedOrganizationId = id; if (this.selectedOrganization) this.loadChurches(this.selectedOrganization); else this.churches = []; }
-  private loadChurches(org: Organization): void { this.loading = true; this.tenant.listPlatformChurches(org.tenant_id).subscribe({ next: (items) => { this.churches = items; this.loading = false; }, error: (error) => { this.errorMessage = this.errorText(error); this.loading = false; } }); }
-  openOrganization(): void { this.editingOrganization = null; this.orgForm.reset({ name: '', slug: '', email: '', phone: '', address: '', country: '' }); this.organizationModal = true; }
-  editOrganization(org: Organization): void { this.editingOrganization = org.tenant_id; this.orgForm.patchValue(org); this.organizationModal = true; }
-  saveOrganization(): void { if (this.orgForm.invalid) { this.orgForm.markAllAsTouched(); return; } const value = this.orgForm.getRawValue(); const payload: OrganizationWriteRequest = { name: value.name ?? '', slug: value.slug ?? '', email: value.email ?? '', phone: value.phone ?? '', address: value.address ?? '', country: value.country ?? '' }; this.saving = true; const req = this.editingOrganization ? this.tenant.updatePlatformOrganization(this.editingOrganization, payload) : this.tenant.createPlatformOrganization(payload); req.subscribe({ next: () => { this.saving = false; this.organizationModal = false; this.successMessage = 'Organisation enregistrÃ©e.'; this.loadOrganizations(); }, error: (error) => { this.saving = false; this.errorMessage = this.errorText(error); } }); }
-  deleteOrganization(org: Organization): void { if (!window.confirm(`Supprimer Â« ${org.name} Â» et ses donnÃ©es ?`)) return; this.tenant.deletePlatformOrganization(org.tenant_id).subscribe({ next: () => { this.successMessage = 'Organisation supprimÃ©e.'; this.loadOrganizations(); }, error: (error) => this.errorMessage = this.errorText(error) }); }
-  openChurch(): void { this.editingChurch = null; this.churchForm.reset({ name: '', slug: '', pastor_name: '', email: '', phone: '', address: '' }); this.churchModal = true; }
-  editChurch(church: Church): void { this.editingChurch = church.church_id; this.churchForm.patchValue(church); this.churchModal = true; }
-  saveChurch(): void { if (!this.selectedOrganization || this.churchForm.invalid) { this.churchForm.markAllAsTouched(); return; } const value = this.churchForm.getRawValue(); const payload: TenantSiteWriteRequest = { name: value.name ?? '', slug: value.slug ?? '', pastor_name: value.pastor_name ?? '', email: value.email ?? '', phone: value.phone ?? '', address: value.address ?? '', organization: this.selectedOrganization.tenant_id }; this.saving = true; const req = this.editingChurch ? this.tenant.updatePlatformChurch(this.editingChurch, payload) : this.tenant.createPlatformChurch(this.selectedOrganization.tenant_id, payload); req.subscribe({ next: () => { this.saving = false; this.churchModal = false; this.successMessage = 'Ã‰glise enregistrÃ©e.'; if (this.selectedOrganization) this.loadChurches(this.selectedOrganization); }, error: (error) => { this.saving = false; this.errorMessage = this.errorText(error); } }); }
-  deleteChurch(church: Church): void { if (!window.confirm(`Supprimer lâ€™Ã©glise Â« ${church.name} Â» ?`)) return; this.tenant.deletePlatformChurch(church.church_id).subscribe({ next: () => { this.successMessage = 'Ã‰glise supprimÃ©e.'; if (this.selectedOrganization) this.loadChurches(this.selectedOrganization); }, error: (error) => this.errorMessage = this.errorText(error) }); }
-  createAccount(): void { if (this.accountForm.invalid) { this.accountForm.markAllAsTouched(); return; } const value = this.accountForm.getRawValue(); const payload = { username: value.username ?? '', email: value.email ?? '', password: value.password ?? '', ...(value.tenant_id ? { tenant_id: value.tenant_id, role: value.role ?? 'admin' } : {}) }; this.saving = true; this.tenant.createPlatformUser(payload).subscribe({ next: (result) => { this.saving = false; this.successMessage = result.organization_id ? `Compte ${result.username} crÃ©Ã©, rÃ´le ${result.role}.` : `Compte ${result.username} crÃ©Ã© sans tenant.`; this.accountForm.reset({ tenant_id: '', role: 'admin', username: '', email: '', password: '' }); }, error: (error) => { this.saving = false; this.errorMessage = this.errorText(error); } }); }
-  private errorText(error: unknown): string { if (error instanceof HttpErrorResponse) { const body = error.error as Record<string, unknown> | string | null; if (typeof body === 'string') return body; if (body && typeof body === 'object') { const detail = body['detail']; if (typeof detail === 'string') return detail; return Object.entries(body).map(([key, value]) => `${key} : ${Array.isArray(value) ? value.join(', ') : value}`).join(' Â· '); } return `Erreur API (${error.status}).`; } return 'Erreur inattendue.'; }
+  orgForm = this.fb.group({
+    name: ['', Validators.required],
+    slug: ['', Validators.required],
+    email: [''],
+    phone: [''],
+    address: [''],
+    country: [''],
+  });
+  churchForm = this.fb.group({
+    organization: ['', Validators.required],
+    name: ['', Validators.required],
+    slug: ['', Validators.required],
+    pastor_name: [''],
+    email: [''],
+    phone: [''],
+    address: [''],
+  });
+  accountForm = this.fb.group({
+    tenant_id: [''],
+    role: ['admin' as 'admin' | 'member', Validators.required],
+    username: ['', Validators.required],
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', [Validators.required, Validators.minLength(8)]],
+  });
+  invoiceForm = this.fb.group({
+    organization: ['', Validators.required],
+    amount: ['', Validators.required],
+    issued_at: ['', Validators.required],
+    due_at: ['', Validators.required],
+  });
+  settingsForm = this.fb.group({
+    platform_name: ['ChurchOS'],
+    support_email: ['support@churchos.io'],
+    default_currency: ['XAF'],
+    default_language: ['fr'],
+  });
+
+  readonly crumbs: Record<Tab, string> = {
+    dashboard: 'Tableau de bord',
+    stats: 'Statistiques',
+    organizations: 'Organisations',
+    churches: 'Églises',
+    users: 'Utilisateurs',
+    subscriptions: 'Abonnements',
+    revenue: "Chiffre d'affaires",
+    billing: 'Facturation',
+    settings: 'Paramètres',
+    support: 'Support',
+  };
+
+  constructor(
+    private fb: FormBuilder,
+    private tenant: TenantService,
+    private platform: PlatformService,
+    private auth: AuthService,
+    private router: Router,
+  ) {}
+
+  ngOnInit(): void {
+    this.auth.me().subscribe({ next: (user) => (this.currentUser = user) });
+    this.reload();
+  }
+
+  get breadcrumb(): string {
+    return this.crumbs[this.tab];
+  }
+
+  get initials(): string {
+    const source = this.currentUser?.username || 'SA';
+    return source.slice(0, 2).toUpperCase();
+  }
+
+  get activeOrganizations(): number {
+    return this.organizations.filter((org) => org.is_active !== false).length;
+  }
+
+  get trialOrganizations(): number {
+    return this.subscriptions.filter((item) => item.status === 'TRIAL').length;
+  }
+
+  get suspendedOrganizations(): number {
+    return this.organizations.filter((org) => org.is_active === false).length;
+  }
+
+  get pendingUsers(): number {
+    return this.users.filter((user) => !user.last_login && user.is_active).length;
+  }
+
+  get suspendedUsers(): number {
+    return this.users.filter((user) => !user.is_active).length;
+  }
+
+  get filteredOrganizations(): Organization[] {
+    const query = this.normalized(this.orgQuery || this.globalQuery);
+    return this.organizations.filter((org) => {
+      const sub = this.subscriptionFor(org);
+      const status = this.orgStatusValue(org, sub);
+      const plan = sub?.plan_name || '';
+      const haystack = `${org.name} ${org.slug} ${org.email}`.toLowerCase();
+      const matchQuery = !query || haystack.includes(query);
+      const matchStatus = !this.orgStatus || status === this.orgStatus;
+      const matchPlan = !this.orgPlan || plan.toLowerCase() === this.orgPlan.toLowerCase();
+      return matchQuery && matchStatus && matchPlan;
+    });
+  }
+
+  get filteredChurches(): Church[] {
+    const query = this.normalized(this.churchQuery || this.globalQuery);
+    return this.churches.filter((church) => {
+      const haystack = `${church.name} ${church.organization_name} ${church.pastor_name} ${church.country}`.toLowerCase();
+      const matchQuery = !query || haystack.includes(query);
+      const matchOrg = !this.churchOrg || church.organization === this.churchOrg;
+      return matchQuery && matchOrg;
+    });
+  }
+
+  get filteredUsers(): PlatformUser[] {
+    const query = this.normalized(this.userQuery || this.globalQuery);
+    return this.users.filter((user) => {
+      const haystack = `${user.username} ${user.email} ${user.organization} ${user.role}`.toLowerCase();
+      const matchQuery = !query || haystack.includes(query);
+      const matchRole = !this.userRole || this.roleValue(user) === this.userRole;
+      const matchOrg = !this.userOrg || user.organization_id === this.userOrg;
+      return matchQuery && matchOrg && matchRole;
+    });
+  }
+
+  get recentOrganizations(): Organization[] {
+    return this.organizations.slice(0, 3);
+  }
+
+  get planShare(): { name: string; count: number; percent: number; tone: string }[] {
+    const total = Math.max(this.organizations.length, 1);
+    const counts = this.plans.map((plan) => ({
+      name: plan.name,
+      count: this.subscriptions.filter((item) => item.plan === plan.id || item.plan_name === plan.name).length,
+      tone: plan.tier === 'ENTERPRISE' || plan.name === 'Enterprise' ? 'purple' : 'blue',
+    }));
+    return counts.map((item) => ({ ...item, percent: Math.round((item.count / total) * 100) }));
+  }
+
+  get topRevenue(): { org: Organization; plan: string; mrr: string; churches: number }[] {
+    return this.organizations
+      .map((org) => {
+        const sub = this.subscriptionFor(org);
+        const plan = this.plans.find((item) => item.id === sub?.plan || item.name === sub?.plan_name);
+        return {
+          org,
+          plan: plan?.name || sub?.plan_name || '—',
+          mrr: plan?.price || '0',
+          churches: this.churches.filter((church) => church.organization === org.tenant_id).length,
+        };
+      })
+      .sort((a, b) => Number(b.mrr) - Number(a.mrr))
+      .slice(0, 8);
+  }
+
+  setTab(tab: Tab): void {
+    this.tab = tab;
+    this.sidebarOpen = false;
+    this.orgMenuId = null;
+    this.userMenuId = null;
+    this.subMenuId = null;
+    this.errorMessage = '';
+    this.successMessage = '';
+  }
+
+  reload(): void {
+    this.loading = true;
+    forkJoin({
+      organizations: this.tenant.listPlatformOrganizations(),
+      churches: this.tenant.listAllPlatformChurches().pipe(catchError(() => of([]))),
+      users: this.tenant.listPlatformUsers().pipe(catchError(() => of([]))),
+      plans: this.platform.getPlans().pipe(catchError(() => of([]))),
+      stats: this.platform.getStats().pipe(catchError(() => of(null))),
+      subscriptions: this.platform.getSubscriptions().pipe(catchError(() => of([]))),
+      invoices: this.platform.getInvoices().pipe(catchError(() => of([]))),
+      tickets: this.platform.getTickets().pipe(catchError(() => of([]))),
+      settings: this.platform.getSettings().pipe(catchError(() => of(this.settingsForm.getRawValue() as PlatformSettings))),
+    }).subscribe({
+      next: (bundle) => {
+        this.organizations = bundle.organizations;
+        this.churches = bundle.churches;
+        this.users = bundle.users;
+        this.plans = bundle.plans;
+        this.stats = bundle.stats;
+        this.subscriptions = bundle.subscriptions;
+        this.invoices = bundle.invoices;
+        this.tickets = bundle.tickets;
+        this.settingsForm.patchValue(bundle.settings);
+        this.loading = false;
+      },
+      error: (error) => {
+        this.errorMessage = this.errorText(error);
+        this.loading = false;
+      },
+    });
+  }
+
+  logout(): void {
+    this.auth.logout().subscribe({
+      next: () => this.router.navigateByUrl('/login-super-admin'),
+      error: () => {
+        this.auth.clearSession();
+        this.router.navigateByUrl('/login-super-admin');
+      },
+    });
+  }
+
+  openOrganization(): void {
+    this.editingOrganization = null;
+    this.orgForm.reset({ name: '', slug: '', email: '', phone: '', address: '', country: '' });
+    this.organizationModal = true;
+  }
+
+  editOrganization(org: Organization): void {
+    this.editingOrganization = org.tenant_id;
+    this.orgForm.patchValue(org);
+    this.organizationModal = true;
+    this.orgMenuId = null;
+  }
+
+  saveOrganization(): void {
+    if (this.orgForm.invalid) {
+      this.orgForm.markAllAsTouched();
+      return;
+    }
+    const value = this.orgForm.getRawValue();
+    const payload: OrganizationWriteRequest = {
+      name: value.name ?? '',
+      slug: value.slug ?? '',
+      email: value.email ?? '',
+      phone: value.phone ?? '',
+      address: value.address ?? '',
+      country: value.country ?? '',
+    };
+    this.saving = true;
+    const req = this.editingOrganization
+      ? this.tenant.updatePlatformOrganization(this.editingOrganization, payload)
+      : this.tenant.createPlatformOrganization(payload);
+    req.subscribe({
+      next: () => {
+        this.saving = false;
+        this.organizationModal = false;
+        this.successMessage = 'Organisation enregistrée.';
+        this.reload();
+      },
+      error: (error) => {
+        this.saving = false;
+        this.errorMessage = this.errorText(error);
+      },
+    });
+  }
+
+  deleteOrganization(org: Organization): void {
+    this.orgMenuId = null;
+    if (!window.confirm(`Supprimer « ${org.name} » et ses données ?`)) return;
+    this.tenant.deletePlatformOrganization(org.tenant_id).subscribe({
+      next: () => {
+        this.successMessage = 'Organisation supprimée.';
+        this.reload();
+      },
+      error: (error) => (this.errorMessage = this.errorText(error)),
+    });
+  }
+
+  viewOrganizationChurches(org: Organization): void {
+    this.selectedOrganization = org;
+    this.selectedOrganizationId = org.tenant_id;
+    this.churchOrg = org.tenant_id;
+    this.setTab('churches');
+  }
+
+  openChurch(org?: Organization): void {
+    const organizationId = org?.tenant_id || this.churchOrg || this.selectedOrganizationId || this.organizations[0]?.tenant_id || '';
+    this.editingChurch = null;
+    this.churchForm.reset({
+      organization: organizationId,
+      name: '',
+      slug: '',
+      pastor_name: '',
+      email: '',
+      phone: '',
+      address: '',
+    });
+    this.churchModal = true;
+  }
+
+  editChurch(church: Church): void {
+    this.editingChurch = church.church_id;
+    this.churchForm.patchValue({
+      organization: church.organization || '',
+      name: church.name,
+      slug: church.slug || '',
+      pastor_name: church.pastor_name || '',
+      email: church.email || '',
+      phone: church.phone || '',
+      address: church.address || '',
+    });
+    this.churchModal = true;
+  }
+
+  saveChurch(): void {
+    if (this.churchForm.invalid) {
+      this.churchForm.markAllAsTouched();
+      return;
+    }
+    const value = this.churchForm.getRawValue();
+    const organizationId = value.organization ?? '';
+    const payload: TenantSiteWriteRequest = {
+      name: value.name ?? '',
+      slug: value.slug ?? '',
+      pastor_name: value.pastor_name ?? '',
+      email: value.email ?? '',
+      phone: value.phone ?? '',
+      address: value.address ?? '',
+      organization: organizationId,
+    };
+    this.saving = true;
+    const req = this.editingChurch
+      ? this.tenant.updatePlatformChurch(this.editingChurch, payload)
+      : this.tenant.createPlatformChurch(organizationId, payload);
+    req.subscribe({
+      next: () => {
+        this.saving = false;
+        this.churchModal = false;
+        this.successMessage = 'Église enregistrée.';
+        this.reload();
+      },
+      error: (error) => {
+        this.saving = false;
+        this.errorMessage = this.errorText(error);
+      },
+    });
+  }
+
+  deleteChurch(church: Church): void {
+    if (!window.confirm(`Supprimer l'église « ${church.name} » ?`)) return;
+    this.tenant.deletePlatformChurch(church.church_id).subscribe({
+      next: () => {
+        this.successMessage = 'Église supprimée.';
+        this.reload();
+      },
+      error: (error) => (this.errorMessage = this.errorText(error)),
+    });
+  }
+
+  openUser(): void {
+    this.accountForm.reset({ tenant_id: '', role: 'admin', username: '', email: '', password: '' });
+    this.userModal = true;
+  }
+
+  createAccount(): void {
+    if (this.accountForm.invalid) {
+      this.accountForm.markAllAsTouched();
+      return;
+    }
+    const value = this.accountForm.getRawValue();
+    const payload = {
+      username: value.username ?? '',
+      email: value.email ?? '',
+      password: value.password ?? '',
+      ...(value.tenant_id ? { tenant_id: value.tenant_id, role: value.role ?? 'admin' } : {}),
+    };
+    this.saving = true;
+    this.tenant.createPlatformUser(payload).subscribe({
+      next: (result) => {
+        this.saving = false;
+        this.userModal = false;
+        this.successMessage = result.organization_id
+          ? `Compte ${result.username} créé, rôle ${result.role}.`
+          : `Compte ${result.username} créé sans tenant.`;
+        this.reload();
+      },
+      error: (error) => {
+        this.saving = false;
+        this.errorMessage = this.errorText(error);
+      },
+    });
+  }
+
+  openInvoice(): void {
+    const today = new Date();
+    const due = new Date(today);
+    due.setDate(due.getDate() + 14);
+    this.invoiceForm.reset({
+      organization: this.organizations[0]?.tenant_id || '',
+      amount: '',
+      issued_at: this.isoDate(today),
+      due_at: this.isoDate(due),
+    });
+    this.invoiceModal = true;
+  }
+
+  saveInvoice(): void {
+    if (this.invoiceForm.invalid) {
+      this.invoiceForm.markAllAsTouched();
+      return;
+    }
+    const value = this.invoiceForm.getRawValue();
+    const year = new Date().getFullYear();
+    const number = `INV-${year}-${String(this.invoices.length + 1).padStart(3, '0')}`;
+    this.saving = true;
+    this.platform
+      .createInvoice({
+        number,
+        organization: value.organization ?? '',
+        amount: value.amount ?? 0,
+        issued_at: value.issued_at ?? '',
+        due_at: value.due_at ?? '',
+        status: 'PENDING',
+        currency: 'XAF',
+      })
+      .subscribe({
+        next: () => {
+          this.saving = false;
+          this.invoiceModal = false;
+          this.successMessage = 'Facture créée.';
+          this.reload();
+        },
+        error: (error) => {
+          this.saving = false;
+          this.errorMessage = this.errorText(error);
+        },
+      });
+  }
+
+  saveSettings(): void {
+    this.saving = true;
+    this.platform.saveSettings(this.settingsForm.getRawValue() as PlatformSettings).subscribe({
+      next: (settings) => {
+        this.saving = false;
+        this.settingsForm.patchValue(settings);
+        this.successMessage = 'Paramètres enregistrés.';
+      },
+      error: (error) => {
+        this.saving = false;
+        this.errorMessage = this.errorText(error);
+      },
+    });
+  }
+
+  resetSettings(): void {
+    this.platform.getSettings().subscribe({
+      next: (settings) => this.settingsForm.patchValue(settings),
+    });
+  }
+
+  subscriptionFor(org: Organization): PlatformSubscription | undefined {
+    return this.subscriptions.find((item) => item.organization === org.tenant_id);
+  }
+
+  orgStatusValue(org: Organization, sub?: PlatformSubscription): string {
+    if (org.is_active === false) return 'suspended';
+    if (sub?.status === 'TRIAL') return 'trial';
+    return 'active';
+  }
+
+  orgStatusLabel(org: Organization): string {
+    const status = this.orgStatusValue(org, this.subscriptionFor(org));
+    if (status === 'suspended') return 'Suspendu';
+    if (status === 'trial') return 'Essai';
+    return 'Actif';
+  }
+
+  orgStatusClass(org: Organization): string {
+    const status = this.orgStatusValue(org, this.subscriptionFor(org));
+    if (status === 'suspended') return 'suspended';
+    if (status === 'trial') return 'pending';
+    return 'active';
+  }
+
+  planLabel(org: Organization): string {
+    return this.subscriptionFor(org)?.plan_name || '—';
+  }
+
+  planChip(name: string | null | undefined): string {
+    const value = (name || '').toLowerCase();
+    if (value.includes('enterprise')) return 'purple';
+    if (value.includes('essai') || value.includes('trial')) return 'amber';
+    if (value.includes('pro') || value.includes('basic')) return 'blue';
+    return '';
+  }
+
+  churchCount(org: Organization): number {
+    return this.churches.filter((church) => church.organization === org.tenant_id).length;
+  }
+
+  ownerName(org: Organization): string {
+    const admin = this.users.find((user) => user.organization_id === org.tenant_id && (user.role === 'admin' || user.role === 'owner'));
+    return admin?.username || '—';
+  }
+
+  roleLabel(user: PlatformUser): string {
+    if (user.is_superuser || user.role === 'superadmin') return 'Super Admin';
+    if (user.role === 'admin' || user.role === 'owner') return 'Admin Org';
+    if (user.role === 'member') return 'Membre';
+    return user.role || '—';
+  }
+
+  roleValue(user: PlatformUser): string {
+    if (user.is_superuser || user.role === 'superadmin') return 'superadmin';
+    if (user.role === 'admin' || user.role === 'owner') return 'admin';
+    return user.role || '';
+  }
+
+  roleChip(user: PlatformUser): string {
+    if (user.is_superuser || user.role === 'superadmin') return 'purple';
+    return 'blue';
+  }
+
+  statusClass(status: string): string {
+    const value = status.toUpperCase();
+    if (['ACTIVE', 'PAID', 'RESOLVED', 'CLOSED'].includes(value)) return 'active';
+    if (['TRIAL', 'PENDING', 'IN_PROGRESS', 'OPEN', 'DRAFT'].includes(value)) return 'pending';
+    if (['SUSPENDED', 'CANCELLED', 'OVERDUE'].includes(value)) return 'suspended';
+    return '';
+  }
+
+  statusLabel(status: string): string {
+    const labels: Record<string, string> = {
+      ACTIVE: 'Actif',
+      TRIAL: 'Essai',
+      SUSPENDED: 'Suspendu',
+      CANCELLED: 'Annulé',
+      PAID: 'Payée',
+      PENDING: 'En attente',
+      DRAFT: 'Brouillon',
+      OVERDUE: 'En retard',
+      OPEN: 'Ouvert',
+      IN_PROGRESS: 'En cours',
+      RESOLVED: 'Résolu',
+      CLOSED: 'Fermé',
+    };
+    return labels[status] || status;
+  }
+
+  priorityLabel(priority: string): string {
+    const labels: Record<string, string> = { LOW: 'Basse', NORMAL: 'Normale', HIGH: 'Haute', URGENT: 'Urgente' };
+    return labels[priority] || priority;
+  }
+
+  lastLoginLabel(value: string | null): string {
+    if (!value) return 'Jamais';
+    const date = new Date(value);
+    const today = new Date();
+    if (date.toDateString() === today.toDateString()) return "Aujourd'hui";
+    return this.formatDate(value);
+  }
+
+  formatDate(value: string | null | undefined): string {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }).format(date);
+  }
+
+  formatMoney(value: string | number | null | undefined): string {
+    const amount = Number(value || 0);
+    if (!Number.isFinite(amount)) return '0';
+    if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1).replace('.0', '')}M`;
+    if (amount >= 1_000) return `${Math.round(amount / 1000)}K`;
+    return amount.toLocaleString('fr-FR');
+  }
+
+  formatAmount(value: string | number | null | undefined): string {
+    return Number(value || 0).toLocaleString('fr-FR');
+  }
+
+  initialsOf(name: string | null | undefined): string {
+    return (name || '??').replace(/[^A-Za-zÀ-ÿ]/g, '').slice(0, 2).toUpperCase() || '??';
+  }
+
+  avatarTone(index: number): string {
+    return ['var(--accent)', 'var(--purple)', 'var(--success)'][index % 3];
+  }
+
+  featuredPlan(plan: PlatformPlan): boolean {
+    return plan.tier === 'PRO' || plan.name.toLowerCase() === 'pro';
+  }
+
+  planCount(plan: PlatformPlan): number {
+    return this.subscriptions.filter((item) => item.plan === plan.id || item.plan_name === plan.name).length;
+  }
+
+  private normalized(value: string): string {
+    return value.trim().toLowerCase();
+  }
+
+  private isoDate(date: Date): string {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private errorText(error: unknown): string {
+    if (error instanceof HttpErrorResponse) {
+      const body = error.error as Record<string, unknown> | string | null;
+      if (typeof body === 'string') return body;
+      if (body && typeof body === 'object') {
+        const detail = body['detail'];
+        if (typeof detail === 'string') return detail;
+        return Object.entries(body)
+          .map(([key, value]) => `${key} : ${Array.isArray(value) ? value.join(', ') : value}`)
+          .join(' · ');
+      }
+      return `Erreur API (${error.status}).`;
+    }
+    return 'Erreur inattendue.';
+  }
 }

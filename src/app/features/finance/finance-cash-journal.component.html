@@ -63,23 +63,52 @@
       <div><span>Total des sorties</span><strong *ngFor="let total of data.total_out">{{ formatMoney(total.amount, total.currency) }}</strong><strong *ngIf="!data.total_out.length">—</strong></div>
     </div>
 
-    <div class="finance-journal-table-wrap">
-      <table class="finance-journal-table">
-        <thead><tr><th>Date d’écriture</th><th>Date opération</th><th>Compte</th><th>Libellé</th><th>Référence / moyen</th><th class="numeric">Entrée</th><th class="numeric">Sortie</th><th class="numeric">Solde après mouvement</th></tr></thead>
-        <tbody>
-          <tr *ngFor="let movement of data.results">
-            <td>{{ movement.created_at | date:'dd/MM/yyyy HH:mm' }}</td>
-            <td>{{ movement.transaction_date | date:'dd/MM/yyyy' }}</td>
-            <td>{{ movement.account_name }}</td>
-            <td><strong>{{ movement.category_name }}</strong><small class="finance-table-subtitle">{{ movement.description || movement.counterparty_name || '—' }}</small></td>
-            <td>{{ movement.payment_reference || movement.transaction_reference || '—' }}<small class="finance-table-subtitle">{{ paymentMethodLabel(movement.payment_method) }}</small></td>
-            <td class="numeric finance-amount-in">{{ movement.direction === 'IN' ? formatMoney(movement.amount, movement.currency) : '—' }}</td>
-            <td class="numeric finance-amount-out">{{ movement.direction === 'OUT' ? formatMoney(movement.amount, movement.currency) : '—' }}</td>
-            <td class="numeric">{{ formatMoney(movement.balance_after, movement.currency) }}</td>
-          </tr>
-          <tr *ngIf="!data.results.length"><td colspan="8" class="finance-empty-journal">Aucun mouvement de trésorerie confirmé pour les filtres choisis.</td></tr>
-        </tbody>
-      </table>
+    <div class="journal-table-panel">
+      <div class="journal-table-filters"></div>
+      <div class="table-wrap" (scroll)="closeMenuOnScroll()">
+        <table class="journal-table" aria-label="Mouvements de trésorerie">
+          <thead>
+            <tr>
+              <th class="check-column"><input type="checkbox" aria-label="Sélectionner tous les mouvements affichés" [checked]="allJournalVisibleSelected" (change)="toggleVisibleJournalSelection($event)" /></th>
+              <th class="number-column">N°</th>
+              <th class="sortable" (click)="sortByJournal('created_at')"><span>Date d’écriture</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="journalSortField === 'created_at' && journalSortDirection === 'asc'">⌃</i><i [class.active]="journalSortField === 'created_at' && journalSortDirection === 'desc'">⌄</i></span></th>
+              <th class="sortable" (click)="sortByJournal('category_name')"><span>Libellé</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="journalSortField === 'category_name' && journalSortDirection === 'asc'">⌃</i><i [class.active]="journalSortField === 'category_name' && journalSortDirection === 'desc'">⌄</i></span></th>
+              <th class="sortable" (click)="sortByJournal('account_name')"><span>Compte</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="journalSortField === 'account_name' && journalSortDirection === 'asc'">⌃</i><i [class.active]="journalSortField === 'account_name' && journalSortDirection === 'desc'">⌄</i></span></th>
+              <th>Référence / moyen</th>
+              <th class="sortable" (click)="sortByJournal('direction')"><span>Type</span><span class="sort-chevrons" aria-hidden="true"><i [class.active]="journalSortField === 'direction' && journalSortDirection === 'asc'">⌃</i><i [class.active]="journalSortField === 'direction' && journalSortDirection === 'desc'">⌄</i></span></th>
+              <th class="numeric">Entrée</th>
+              <th class="numeric">Sortie</th>
+              <th class="numeric">Solde après mouvement</th>
+              <th class="actions-column">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let movement of pagedMovements; let i = index; trackBy: trackByJournalId" (click)="viewJournalDetail(movement)">
+              <td class="check-column"><input type="checkbox" [attr.aria-label]="'Sélectionner le mouvement ' + movement.id" [checked]="selectedJournalIds.has(movement.id)" (click)="$event.stopPropagation()" (change)="toggleJournalSelection(movement.id, $event)" /></td>
+              <td class="number-column"><span class="journal-number">#{{ journalRangeStart + i }}</span></td>
+              <td>{{ movement.created_at | date:'dd/MM/yyyy HH:mm' }}</td>
+              <td><strong>{{ movement.category_name }}</strong><small class="finance-table-subtitle">{{ movement.description || movement.counterparty_name || '—' }}</small></td>
+              <td>{{ movement.account_name }}</td>
+              <td>{{ movement.payment_reference || movement.transaction_reference || '—' }}<small class="finance-table-subtitle">{{ paymentMethodLabel(movement.payment_method) }}</small></td>
+              <td><span class="journal-direction" [attr.data-direction]="movement.direction">{{ movement.direction === 'IN' ? 'Entrée' : 'Sortie' }}</span></td>
+              <td class="numeric finance-amount-in">{{ movement.direction === 'IN' ? formatMoney(movement.amount, movement.currency) : '—' }}</td>
+              <td class="numeric finance-amount-out">{{ movement.direction === 'OUT' ? formatMoney(movement.amount, movement.currency) : '—' }}</td>
+              <td class="numeric">{{ formatMoney(movement.balance_after, movement.currency) }}</td>
+              <td class="actions-column">
+                <div class="context-wrap">
+                  <button type="button" class="context-trigger" aria-label="Actions écriture" (click)="toggleMenu(movement.id, $event)"><span></span><span></span><span></span></button>
+                  <div class="context-menu" *ngIf="openMenuId === movement.id" [style.top.px]="menuPosition.top" [style.left.px]="menuPosition.left" (click)="$event.stopPropagation()">
+                    <button type="button" (click)="viewJournalDetail(movement)">Voir les détails</button>
+                    <button type="button" (click)="printJournal()">Imprimer l’écriture</button>
+                  </div>
+                </div>
+              </td>
+            </tr>
+            <tr *ngIf="!pagedMovements.length"><td colspan="11" class="journal-empty">Aucun mouvement de trésorerie confirmé pour les filtres choisis.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <footer class="journal-table-footer"><span>Affichage de {{ journalRangeStart }} à {{ journalRangeEnd }} sur {{ filteredMovements.length }} écriture(s)</span><div class="journal-pagination"><button type="button" aria-label="Page précédente" [disabled]="journalPageIndex === 0" (click)="changeJournalPage(-1)">‹</button><button *ngFor="let page of visibleJournalPages" type="button" [class.current-page]="page === journalPageIndex" (click)="goToJournalPage(page)">{{ page + 1 }}</button><span class="page-ellipsis" *ngIf="journalPageCount > 5">…</span><button *ngIf="journalPageCount > 5" type="button" [class.current-page]="journalPageIndex === journalPageCount - 1" (click)="goToJournalPage(journalPageCount - 1)">{{ journalPageCount }}</button><button type="button" aria-label="Page suivante" [disabled]="journalPageIndex + 1 >= journalPageCount" (click)="changeJournalPage(1)">›</button></div></footer>
     </div>
     <footer class="finance-report-footer">Journal immuable des mouvements confirmés · {{ data.church_name }}</footer>
   </section>

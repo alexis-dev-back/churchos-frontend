@@ -9,6 +9,14 @@ export interface Person {
   date_of_birth?: string | null;
   address?: string | null;
   notes?: string | null;
+  nationality?: string | null;
+  profession?: string | null;
+  education_level?: string | null;
+  marital_status?: string | null;
+  baptism_status?: string;
+  person_type?: 'INVITED' | 'NON_INVITED';
+  invited_by_member?: string | null;
+  invited_by_member_name?: string | null;
   user?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -24,6 +32,13 @@ export interface PersonCreateRequest {
   date_of_birth?: string;
   address?: string;
   notes?: string;
+  nationality?: string;
+  profession?: string;
+  education_level?: string;
+  marital_status?: string;
+  baptism_status?: string;
+  person_type?: 'INVITED' | 'NON_INVITED';
+  invited_by_member?: string | null;
 }
 
 export interface PersonMembershipRequest {
@@ -35,4 +50,10 @@ export interface PersonMembershipRequest {
   phone?: string;
   gender?: string;
   date_of_birth?: string;
+}
+
+export interface InvitingMember {
+  id: string;
+  first_name: string;
+  last_name: string;
 }

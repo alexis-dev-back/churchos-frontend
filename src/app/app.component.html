@@ -1,3 +1,5 @@
+<app-notification-center></app-notification-center>
+
 <ng-container *ngIf="showApplicationShell; else publicPage">
   <div class="app-shell">
     <app-sidebar [open]="mobileMenuOpen" (closeSidebar)="mobileMenuOpen = false"></app-sidebar>
